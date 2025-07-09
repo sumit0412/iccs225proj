@@ -273,3 +273,50 @@ BEGIN
           AND a.account_status = 'active';
 END;
 $auth$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_properties_needing_content_review(limit_count INT DEFAULT 20)
+    RETURNS TABLE (
+                      property_id INT,
+                      property_name TEXT,
+                      partner_company TEXT,
+                      content_status TEXT,
+                      issue_description TEXT,
+                      last_updated TIMESTAMP
+                  ) AS $$
+BEGIN
+    RETURN QUERY
+        SELECT
+            p.property_id,
+            p.property_name,
+            pt.company_name AS partner_company,
+            p.content_status,
+            CASE
+                WHEN p.content_status = 'under_review' THEN 'Content updates requested'
+                WHEN p.content_status = 'draft' THEN 'Initial content incomplete'
+                ELSE 'Review required'
+                END AS issue_description,
+            p.updated_at AS last_updated
+        FROM properties p
+                 JOIN partners pt ON p.partner_id = pt.partner_id
+        WHERE p.content_status IN ('under_review', 'draft', 'pending_review')
+        ORDER BY p.updated_at ASC
+        LIMIT limit_count;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION deactivate_coupon(
+    coupon_id INT,
+    admin_id INT
+) RETURNS BOOLEAN AS $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM admin_users WHERE admin_id = deactivate_coupon.admin_id) THEN
+        RAISE EXCEPTION 'Invalid admin user';
+    END IF;
+
+    UPDATE coupons
+    SET coupon_status = 'inactive'
+    WHERE coupon_id = deactivate_coupon.coupon_id;
+
+    RETURN FOUND;
+END;
+$$ LANGUAGE plpgsql;
