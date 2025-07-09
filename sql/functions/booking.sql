@@ -1,5 +1,4 @@
-CREATE
-    OR REPLACE FUNCTION create_booking(
+CREATE OR REPLACE FUNCTION create_booking(
     user_id INT,
     property_id INT,
     room_type_id INT,
@@ -12,8 +11,7 @@ CREATE
     guest_last_name TEXT DEFAULT NULL,
     guest_email TEXT DEFAULT NULL,
     guest_phone TEXT DEFAULT NULL,
-    special_requests TEXT DEFAULT NULL,
-    payment_method TEXT DEFAULT 'credit_card'
+    special_requests TEXT DEFAULT NULL
 )
     RETURNS TABLE
             (
@@ -24,32 +22,24 @@ CREATE
 AS
 $$
 DECLARE
-    new_booking_id INT;
-    new_booking_reference
-                   TEXT;
-    calculated_total
-                   NUMERIC;
-    total_nights
-                   INT;
-    date_iterator
-                   DATE;
-    room_rate
-                   NUMERIC;
-    currency
-                   VARCHAR(3);
-    new_payment_id
-                   INT;
+    new_booking_id        INT;
+    new_booking_reference TEXT;
+    calculated_total NUMERIC;
+    total_nights INT;
+    date_iterator DATE;
+    room_rate NUMERIC;
+    currency VARCHAR(3);
 BEGIN
-    IF
-        check_out_date <= check_in_date THEN
+    -- Validate dates
+    IF check_out_date <= check_in_date THEN
         RAISE EXCEPTION 'Check-out date must be after check-in date';
     END IF;
 
-    total_nights
-        := (check_out_date - check_in_date);
+    total_nights := (check_out_date - check_in_date);
 
+    -- Check room availability for all dates
     FOR date_iterator IN
-        SELECT generate_series(check_in_date, check_out_date - INTERVAL '1 day', '1 day') ::DATE
+        SELECT generate_series(check_in_date, check_out_date - INTERVAL '1 day', '1 day')::DATE
         LOOP
             IF NOT EXISTS (SELECT 1
                            FROM availability a
@@ -60,6 +50,7 @@ BEGIN
             END IF;
         END LOOP;
 
+    -- Get average rate and currency for the booking period
     SELECT AVG(a.rate), rt.currency_code
     INTO room_rate, currency
     FROM availability a
@@ -67,21 +58,21 @@ BEGIN
     WHERE a.room_type_id = create_booking.room_type_id
       AND a.available_date BETWEEN check_in_date AND check_out_date - INTERVAL '1 day';
 
-    calculated_total
-        := room_rate * total_nights * total_rooms;
+    calculated_total := room_rate * total_nights * total_rooms;
 
-    IF
-        guest_first_name IS NULL OR guest_last_name IS NULL OR guest_email IS NULL THEN
+    -- Use user information if guest details not provided
+    IF guest_first_name IS NULL OR guest_last_name IS NULL OR guest_email IS NULL THEN
         SELECT u.first_name, u.last_name, u.email
         INTO guest_first_name, guest_last_name, guest_email
         FROM users u
         WHERE u.user_id = create_booking.user_id;
     END IF;
 
-    new_booking_reference
-        := 'AGD-' || TO_CHAR(CURRENT_TIMESTAMP, 'YYYYMMDD') || '-' ||
-           LPAD(FLOOR(RANDOM() * 999999)::TEXT, 6, '0');
+    -- Generate booking reference
+    new_booking_reference := 'AGD-' || TO_CHAR(CURRENT_TIMESTAMP, 'YYYYMMDD') || '-' ||
+                             LPAD(FLOOR(RANDOM() * 999999)::TEXT, 6, '0');
 
+    -- Create booking
     INSERT INTO bookings (booking_reference, user_id, property_id, room_type_id,
                           check_in_date, check_out_date, total_nights, total_adults,
                           total_children, total_rooms, total_amount, currency_code,
@@ -92,89 +83,76 @@ BEGIN
             total_children, total_rooms, calculated_total, currency,
             'confirmed', guest_first_name, guest_last_name,
             guest_email, guest_phone, special_requests)
-    RETURNING booking_id
-        INTO new_booking_id;
+    RETURNING booking_id INTO new_booking_id;
 
-    INSERT INTO payments (booking_id, amount, currency_code, payment_method,
-                          payment_status, transaction_id, processed_at)
-    VALUES (new_booking_id, calculated_total, currency, payment_method,
-            'completed', 'TXN-' || new_booking_reference, CURRENT_TIMESTAMP)
-    RETURNING payment_id
-        INTO new_payment_id;
-
+    -- Update availability (reduce available rooms)
     FOR date_iterator IN
-        SELECT generate_series(check_in_date, check_out_date - INTERVAL '1 day', '1 day') ::DATE
+        SELECT generate_series(check_in_date, check_out_date - INTERVAL '1 day', '1 day')::DATE
         LOOP
             UPDATE availability
-            SET available_rooms = available_rooms - total_rooms
+            SET available_rooms = available_rooms - total_rooms,
+                last_updated = CURRENT_TIMESTAMP
             WHERE room_type_id = create_booking.room_type_id
               AND available_date = date_iterator;
         END LOOP;
 
-    RETURN QUERY
-        SELECT new_booking_id, new_booking_reference, calculated_total;
+    RETURN QUERY SELECT new_booking_id, new_booking_reference, calculated_total;
 END;
-$$
-    LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
-CREATE
-    OR REPLACE FUNCTION cancel_booking(target_booking_id INT, user_id INT DEFAULT NULL)
+CREATE OR REPLACE FUNCTION cancel_booking(target_booking_id INT, user_id INT DEFAULT NULL)
     RETURNS BOOLEAN AS
 $$
 DECLARE
     booking_record RECORD;
-    date_iterator
-                   DATE;
+    date_iterator DATE;
 BEGIN
+    -- Get booking details
     SELECT *
     INTO booking_record
     FROM bookings
     WHERE booking_id = target_booking_id
       AND (user_id IS NULL OR bookings.user_id = cancel_booking.user_id);
 
-    IF
-        booking_record IS NULL THEN
+    IF booking_record IS NULL THEN
         RETURN FALSE;
     END IF;
 
-    IF
-        booking_record.check_in_date <= CURRENT_DATE + INTERVAL '1 day' THEN
+    -- Check if booking can be cancelled (not too close to check-in)
+    IF booking_record.check_in_date <= CURRENT_DATE + INTERVAL '1 day' THEN
         RETURN FALSE;
     END IF;
 
-    IF
-        booking_record.booking_status = 'cancelled' THEN
+    -- Check if already cancelled
+    IF booking_record.booking_status = 'cancelled' THEN
         RETURN FALSE;
     END IF;
 
+    -- Update booking status
     UPDATE bookings
     SET booking_status = 'cancelled'
     WHERE booking_id = target_booking_id;
 
+    -- Restore availability
     FOR date_iterator IN
         SELECT generate_series(
                        booking_record.check_in_date,
                        booking_record.check_out_date - INTERVAL '1 day',
                        '1 day'
-               ) ::DATE
+               )::DATE
         LOOP
             UPDATE availability
-            SET available_rooms = available_rooms + booking_record.total_rooms
+            SET available_rooms = available_rooms + booking_record.total_rooms,
+                last_updated = CURRENT_TIMESTAMP
             WHERE room_type_id = booking_record.room_type_id
               AND available_date = date_iterator;
         END LOOP;
 
-    UPDATE payments
-    SET payment_status = 'refunded'
-    WHERE booking_id = target_booking_id;
-
     RETURN TRUE;
 END;
-$$
-    LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
-CREATE
-    OR REPLACE FUNCTION get_booking_details(target_booking_id INT)
+CREATE OR REPLACE FUNCTION get_booking_details(target_booking_id INT)
     RETURNS TABLE
             (
                 booking_id        INT,
@@ -199,7 +177,6 @@ CREATE
                 city_name         TEXT,
                 country_name      TEXT,
                 contact_phone     TEXT,
-                payment_status    TEXT,
                 created_at        TIMESTAMP
             )
 AS
@@ -228,7 +205,6 @@ BEGIN
                c.city_name,
                co.country_name,
                p.contact_phone,
-               pay.payment_status,
                b.created_at
         FROM bookings b
                  JOIN properties p ON b.property_id = p.property_id
@@ -236,14 +212,11 @@ BEGIN
                  JOIN locations l ON p.location_id = l.location_id
                  JOIN cities c ON l.city_id = c.city_id
                  JOIN countries co ON c.country_id = co.country_id
-                 LEFT JOIN payments pay ON b.booking_id = pay.booking_id
         WHERE b.booking_id = target_booking_id;
 END;
-$$
-    LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
-CREATE
-    OR REPLACE FUNCTION modify_booking(
+CREATE OR REPLACE FUNCTION modify_booking(
     target_booking_id INT,
     new_check_in_date DATE DEFAULT NULL,
     new_check_out_date DATE DEFAULT NULL,
@@ -253,50 +226,43 @@ CREATE
 $$
 DECLARE
     booking_record RECORD;
-    new_total_nights
-                   INT;
-    new_total_amount
-                   NUMERIC;
-    date_iterator
-                   DATE;
-    room_rate
-                   NUMERIC;
+    new_total_nights INT;
+    new_total_amount NUMERIC;
+    date_iterator DATE;
+    room_rate NUMERIC;
 BEGIN
+    -- Get current booking details
     SELECT *
     INTO booking_record
     FROM bookings
     WHERE booking_id = target_booking_id
       AND booking_status = 'confirmed';
 
-    IF
-        booking_record IS NULL THEN
+    IF booking_record IS NULL THEN
         RETURN FALSE;
     END IF;
 
-    new_check_in_date
-        := COALESCE(new_check_in_date, booking_record.check_in_date);
-    new_check_out_date
-        := COALESCE(new_check_out_date, booking_record.check_out_date);
-    new_total_rooms
-        := COALESCE(new_total_rooms, booking_record.total_rooms);
-    new_special_requests
-        := COALESCE(new_special_requests, booking_record.special_requests);
+    -- Set defaults to current values
+    new_check_in_date := COALESCE(new_check_in_date, booking_record.check_in_date);
+    new_check_out_date := COALESCE(new_check_out_date, booking_record.check_out_date);
+    new_total_rooms := COALESCE(new_total_rooms, booking_record.total_rooms);
+    new_special_requests := COALESCE(new_special_requests, booking_record.special_requests);
 
-    IF
-        new_check_out_date <= new_check_in_date THEN
+    -- Validate new dates
+    IF new_check_out_date <= new_check_in_date THEN
         RETURN FALSE;
     END IF;
 
-    new_total_nights
-        := (new_check_out_date - new_check_in_date);
+    new_total_nights := (new_check_out_date - new_check_in_date);
 
-    IF
-        new_check_in_date != booking_record.check_in_date OR
-        new_check_out_date != booking_record.check_out_date OR
-        new_total_rooms != booking_record.total_rooms THEN
+    -- If dates or room count changed, check availability and update
+    IF new_check_in_date != booking_record.check_in_date OR
+       new_check_out_date != booking_record.check_out_date OR
+       new_total_rooms != booking_record.total_rooms THEN
 
+        -- Check availability for new dates/rooms
         FOR date_iterator IN
-            SELECT generate_series(new_check_in_date, new_check_out_date - INTERVAL '1 day', '1 day') ::DATE
+            SELECT generate_series(new_check_in_date, new_check_out_date - INTERVAL '1 day', '1 day')::DATE
             LOOP
                 IF NOT EXISTS (SELECT 1
                                FROM availability a
@@ -307,44 +273,45 @@ BEGIN
                 END IF;
             END LOOP;
 
+        -- Restore availability for old dates
         FOR date_iterator IN
             SELECT generate_series(
                            booking_record.check_in_date,
                            booking_record.check_out_date - INTERVAL '1 day',
                            '1 day'
-                   ) ::DATE
+                   )::DATE
             LOOP
                 UPDATE availability
-                SET available_rooms = available_rooms + booking_record.total_rooms
+                SET available_rooms = available_rooms + booking_record.total_rooms,
+                    last_updated = CURRENT_TIMESTAMP
                 WHERE room_type_id = booking_record.room_type_id
                   AND available_date = date_iterator;
             END LOOP;
 
+        -- Reserve new dates
         FOR date_iterator IN
-            SELECT generate_series(new_check_in_date, new_check_out_date - INTERVAL '1 day', '1 day') ::DATE
+            SELECT generate_series(new_check_in_date, new_check_out_date - INTERVAL '1 day', '1 day')::DATE
             LOOP
                 UPDATE availability
-                SET available_rooms = available_rooms - new_total_rooms
+                SET available_rooms = available_rooms - new_total_rooms,
+                    last_updated = CURRENT_TIMESTAMP
                 WHERE room_type_id = booking_record.room_type_id
                   AND available_date = date_iterator;
             END LOOP;
 
+        -- Calculate new total amount
         SELECT AVG(a.rate)
         INTO room_rate
         FROM availability a
         WHERE a.room_type_id = booking_record.room_type_id
           AND a.available_date BETWEEN new_check_in_date AND new_check_out_date - INTERVAL '1 day';
 
-        new_total_amount
-            := room_rate * new_total_nights * new_total_rooms;
-
-        UPDATE payments
-        SET amount = new_total_amount
-        WHERE booking_id = target_booking_id;
+        new_total_amount := room_rate * new_total_nights * new_total_rooms;
     ELSE
         new_total_amount := booking_record.total_amount;
     END IF;
 
+    -- Update booking
     UPDATE bookings
     SET check_in_date    = new_check_in_date,
         check_out_date   = new_check_out_date,
@@ -356,5 +323,4 @@ BEGIN
 
     RETURN TRUE;
 END;
-$$
-    LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
