@@ -1,9 +1,9 @@
 CREATE OR REPLACE FUNCTION update_room_availability(
-    partner_id INT,
-    room_type_id INT,
-    dates DATE[],
-    available_rooms INT[],
-    rates NUMERIC[] DEFAULT NULL
+    p_partner_id INT,
+    p_room_type_id INT,
+    p_dates DATE[],
+    p_available_rooms INT[],
+    p_rates NUMERIC[] DEFAULT NULL
 ) RETURNS VOID AS
 $$
 DECLARE
@@ -13,25 +13,25 @@ BEGIN
     IF NOT EXISTS (SELECT 1
                    FROM room_types rt
                             JOIN properties p ON rt.property_id = p.property_id
-                   WHERE rt.room_type_id = update_room_availability.room_type_id
-                     AND p.partner_id = update_room_availability.partner_id) THEN
+                   WHERE rt.room_type_id = p_room_type_id
+                     AND p.partner_id = p_partner_id) THEN
         RAISE EXCEPTION 'Room type not owned by partner';
     END IF;
 
     -- Update availability for each date
-    FOR i IN 1 .. array_length(dates, 1)
+    FOR i IN 1 .. array_length(p_dates, 1)
         LOOP
             INSERT INTO availability (room_type_id, available_date, total_rooms, available_rooms, rate, currency_code,
                                       updated_by)
-            SELECT update_room_availability.room_type_id,
-                   dates[i],
+            SELECT p_room_type_id,
+                   p_dates[i],
                    rt.total_rooms,
-                   available_rooms[i],
-                   COALESCE(rates[i], rt.base_rate),
+                   p_available_rooms[i],
+                   COALESCE(p_rates[i], rt.base_rate),
                    rt.currency_code,
-                   update_room_availability.partner_id
+                   p_partner_id
             FROM room_types rt
-            WHERE rt.room_type_id = update_room_availability.room_type_id
+            WHERE rt.room_type_id = p_room_type_id
             ON CONFLICT (room_type_id, available_date)
                 DO UPDATE SET available_rooms = EXCLUDED.available_rooms,
                               rate            = EXCLUDED.rate,
@@ -41,7 +41,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION get_partner_properties(partner_id INT)
+CREATE OR REPLACE FUNCTION get_partner_properties(p_partner_id INT)
     RETURNS TABLE
             (
                 property_id      INT,
@@ -79,17 +79,17 @@ BEGIN
                  LEFT JOIN room_types rt ON p.property_id = rt.property_id
                  LEFT JOIN bookings b ON p.property_id = b.property_id
                  LEFT JOIN reviews r ON p.property_id = r.property_id AND r.review_status = 'approved'
-        WHERE p.partner_id = get_partner_properties.partner_id
+        WHERE p.partner_id = p_partner_id
         GROUP BY p.property_id, l.location_name, c.city_name
         ORDER BY p.created_at DESC;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION get_property_bookings(
-    partner_id INT,
-    property_id INT DEFAULT NULL,
-    date_from DATE DEFAULT CURRENT_DATE - INTERVAL '30 days',
-    date_to DATE DEFAULT CURRENT_DATE + INTERVAL '30 days'
+    p_partner_id INT,
+    p_property_id INT DEFAULT NULL,
+    p_date_from DATE DEFAULT CURRENT_DATE - INTERVAL '30 days',
+    p_date_to DATE DEFAULT CURRENT_DATE + INTERVAL '30 days'
 )
     RETURNS TABLE
             (
@@ -134,14 +134,14 @@ BEGIN
                  JOIN properties p ON b.property_id = p.property_id
                  JOIN room_types rt ON b.room_type_id = rt.room_type_id
                  LEFT JOIN payments pay ON b.booking_id = pay.booking_id
-        WHERE p.partner_id = get_property_bookings.partner_id
-          AND (property_id IS NULL OR p.property_id = get_property_bookings.property_id)
-          AND b.check_in_date BETWEEN date_from AND date_to
+        WHERE p.partner_id = p_partner_id
+          AND (p_property_id IS NULL OR p.property_id = p_property_id)
+          AND b.check_in_date BETWEEN p_date_from AND p_date_to
         ORDER BY b.check_in_date DESC, b.created_at DESC;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION get_partner_notifications(partner_id INT, limit_count INT DEFAULT 10)
+CREATE OR REPLACE FUNCTION get_partner_notifications(p_partner_id INT, p_limit_count INT DEFAULT 10)
     RETURNS TABLE
             (
                 notification_type TEXT,
@@ -195,7 +195,7 @@ BEGIN
                  JOIN room_types rt ON b.room_type_id = rt.room_type_id
                  LEFT JOIN payments pay ON b.booking_id = pay.booking_id
                  LEFT JOIN reviews r ON b.booking_id = r.booking_id
-        WHERE p.partner_id = get_partner_notifications.partner_id
+        WHERE p.partner_id = p_partner_id
           AND (
             (b.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days') OR
             (pay.processed_at > CURRENT_TIMESTAMP - INTERVAL '7 days') OR
@@ -209,18 +209,18 @@ BEGIN
                      ELSE 3
                      END,
                  created_at DESC
-        LIMIT limit_count;
+        LIMIT p_limit_count;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION register_partner(
-    company_name TEXT,
-    contact_email TEXT,
-    password TEXT,
-    contact_person_first_name TEXT,
-    contact_person_last_name TEXT,
-    phone_number TEXT,
-    country_code TEXT DEFAULT 'TH'
+    p_company_name TEXT,
+    p_contact_email TEXT,
+    p_password TEXT,
+    p_contact_person_first_name TEXT,
+    p_contact_person_last_name TEXT,
+    p_phone_number TEXT,
+    p_country_code TEXT DEFAULT 'TH'
 )
     RETURNS TABLE
             (
@@ -235,10 +235,10 @@ DECLARE
     target_country_id INT;
 BEGIN
     -- Get country_id from country_code
-    SELECT country_id
+    SELECT co.country_id
     INTO target_country_id
-    FROM countries
-    WHERE country_code = register_partner.country_code;
+    FROM countries co
+    WHERE co.country_code = p_country_code;
 
     IF target_country_id IS NULL THEN
         target_country_id := 1; -- Default to Thailand
@@ -247,16 +247,16 @@ BEGIN
     INSERT INTO partners (company_name, contact_email, password_hash,
                           contact_person_first_name, contact_person_last_name,
                           phone_number, country_id)
-    VALUES (company_name, contact_email, crypt(password, gen_salt('bf', 8)),
-            contact_person_first_name, contact_person_last_name,
-            phone_number, target_country_id)
+    VALUES (p_company_name, p_contact_email, crypt(p_password, gen_salt('bf', 8)),
+            p_contact_person_first_name, p_contact_person_last_name,
+            p_phone_number, target_country_id)
     RETURNING partner_id, created_at INTO new_partner_id, new_created_at;
 
     RETURN QUERY SELECT new_partner_id, new_created_at;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION authenticate_partner(email TEXT, password TEXT)
+CREATE OR REPLACE FUNCTION authenticate_partner(p_email TEXT, p_password TEXT)
     RETURNS TABLE
             (
                 partner_id          INT,
@@ -277,22 +277,22 @@ BEGIN
                p.account_status,
                p.verification_status
         FROM partners p
-        WHERE p.contact_email = authenticate_partner.email
-          AND password_hash = crypt(authenticate_partner.password, password_hash);
+        WHERE p.contact_email = p_email
+          AND p.password_hash = crypt(p_password, p.password_hash);
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION create_property(
-    partner_id INT,
-    property_name TEXT,
-    property_type TEXT,
-    star_rating INT,
-    city_name TEXT,
-    street_address TEXT,
-    location_name TEXT DEFAULT NULL,
-    description TEXT DEFAULT NULL,
-    contact_phone TEXT DEFAULT NULL,
-    contact_email TEXT DEFAULT NULL
+    p_partner_id INT,
+    p_property_name TEXT,
+    p_property_type TEXT,
+    p_star_rating INT,
+    p_city_name TEXT,
+    p_street_address TEXT,
+    p_location_name TEXT DEFAULT NULL,
+    p_description TEXT DEFAULT NULL,
+    p_contact_phone TEXT DEFAULT NULL,
+    p_contact_email TEXT DEFAULT NULL
 ) RETURNS INT AS
 $$
 DECLARE
@@ -301,33 +301,33 @@ DECLARE
     target_city_id     INT;
 BEGIN
     -- Find city
-    SELECT city_id
+    SELECT c.city_id
     INTO target_city_id
-    FROM cities
-    WHERE city_name ILIKE create_property.city_name;
+    FROM cities c
+    WHERE c.city_name ILIKE p_city_name;
 
     IF target_city_id IS NULL THEN
-        RAISE EXCEPTION 'City not found: %', city_name;
+        RAISE EXCEPTION 'City not found: %', p_city_name;
     END IF;
 
     -- Handle location
-    IF location_name IS NOT NULL THEN
-        SELECT location_id
+    IF p_location_name IS NOT NULL THEN
+        SELECT l.location_id
         INTO target_location_id
-        FROM locations
-        WHERE city_id = target_city_id
-          AND location_name ILIKE create_property.location_name;
+        FROM locations l
+        WHERE l.city_id = target_city_id
+          AND l.location_name ILIKE p_location_name;
 
         IF target_location_id IS NULL THEN
             INSERT INTO locations (location_name, city_id, area_type)
-            VALUES (location_name, target_city_id, 'General Area')
+            VALUES (p_location_name, target_city_id, 'General Area')
             RETURNING location_id INTO target_location_id;
         END IF;
     ELSE
-        SELECT location_id
+        SELECT l.location_id
         INTO target_location_id
-        FROM locations
-        WHERE city_id = target_city_id
+        FROM locations l
+        WHERE l.city_id = target_city_id
         LIMIT 1;
 
         IF target_location_id IS NULL THEN
@@ -340,26 +340,26 @@ BEGIN
     INSERT INTO properties (partner_id, property_name, property_type, star_rating,
                             location_id, street_address, description, total_rooms,
                             contact_phone, contact_email)
-    VALUES (partner_id, property_name, property_type, star_rating,
-            target_location_id, street_address, description, 0,
-            contact_phone, contact_email)
-    RETURNING property_id INTO new_property_id;
+    VALUES (p_partner_id, p_property_name, p_property_type, p_star_rating,
+            target_location_id, p_street_address, p_description, 0,
+            p_contact_phone, p_contact_email)
+    RETURNING properties.property_id INTO new_property_id;
 
     RETURN new_property_id;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION add_room_type(
-    property_id INT,
-    partner_id INT,
-    room_type_name TEXT,
-    max_occupancy INT,
-    max_adults INT,
-    max_children INT,
-    bed_configuration TEXT,
-    base_rate NUMERIC,
-    currency_code TEXT,
-    total_rooms INT
+    p_property_id INT,
+    p_partner_id INT,
+    p_room_type_name TEXT,
+    p_max_occupancy INT,
+    p_max_adults INT,
+    p_max_children INT,
+    p_bed_configuration TEXT,
+    p_base_rate NUMERIC,
+    p_currency_code TEXT,
+    p_total_rooms INT
 ) RETURNS INT AS
 $$
 DECLARE
@@ -368,35 +368,35 @@ BEGIN
     -- Verify ownership
     IF NOT EXISTS (SELECT 1
                    FROM properties p
-                   WHERE p.property_id = add_room_type.property_id
-                     AND p.partner_id = add_room_type.partner_id) THEN
+                   WHERE p.property_id = p_property_id
+                     AND p.partner_id = p_partner_id) THEN
         RAISE EXCEPTION 'Property not owned by partner';
     END IF;
 
     INSERT INTO room_types (property_id, room_type_name, max_occupancy, max_adults,
                             max_children, bed_configuration, base_rate, currency_code, total_rooms)
-    VALUES (property_id, room_type_name, max_occupancy, max_adults,
-            max_children, bed_configuration, base_rate, currency_code, total_rooms)
-    RETURNING room_type_id INTO new_room_type_id;
+    VALUES (p_property_id, p_room_type_name, p_max_occupancy, p_max_adults,
+            p_max_children, p_bed_configuration, p_base_rate, p_currency_code, p_total_rooms)
+    RETURNING room_types.room_type_id INTO new_room_type_id;
 
     -- Update property total rooms
-    UPDATE properties
+    UPDATE properties prop
     SET total_rooms = (SELECT SUM(rt.total_rooms)
                        FROM room_types rt
-                       WHERE rt.property_id = add_room_type.property_id)
-    WHERE property_id = add_room_type.property_id;
+                       WHERE rt.property_id = p_property_id)
+    WHERE prop.property_id = p_property_id;
 
     RETURN new_room_type_id;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION add_property_image(
-    property_id INT,
-    partner_id INT,
-    image_url TEXT,
-    image_category TEXT DEFAULT 'general',
-    display_order INT DEFAULT 0,
-    is_primary BOOLEAN DEFAULT FALSE
+    p_property_id INT,
+    p_partner_id INT,
+    p_image_url TEXT,
+    p_image_category TEXT DEFAULT 'general',
+    p_display_order INT DEFAULT 0,
+    p_is_primary BOOLEAN DEFAULT FALSE
 ) RETURNS INT AS
 $$
 DECLARE
@@ -404,13 +404,13 @@ DECLARE
 BEGIN
     IF NOT EXISTS (SELECT 1
                    FROM properties p
-                   WHERE p.property_id = add_property_image.property_id
-                     AND p.partner_id = add_property_image.partner_id) THEN
+                   WHERE p.property_id = p_property_id
+                     AND p.partner_id = p_partner_id) THEN
         RAISE EXCEPTION 'Property not owned by partner';
     END IF;
 
     INSERT INTO property_images (property_id, image_url, image_category, display_order, is_primary)
-    VALUES (property_id, image_url, image_category, display_order, is_primary)
+    VALUES (p_property_id, p_image_url, p_image_category, p_display_order, p_is_primary)
     RETURNING image_id INTO new_image_id;
 
     RETURN new_image_id;
@@ -418,27 +418,27 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION set_property_amenities(
-    property_id INT,
-    partner_id INT,
-    amenity_ids INT[]
+    p_property_id INT,
+    p_partner_id INT,
+    p_amenity_ids INT[]
 ) RETURNS BOOLEAN AS
 $$
 BEGIN
     IF NOT EXISTS (SELECT 1
                    FROM properties p
-                   WHERE p.property_id = set_property_amenities.property_id
-                     AND p.partner_id = set_property_amenities.partner_id) THEN
+                   WHERE p.property_id = p_property_id
+                     AND p.partner_id = p_partner_id) THEN
         RAISE EXCEPTION 'Property not owned by partner';
     END IF;
 
     DELETE
-    FROM property_amenities
-    WHERE property_id = set_property_amenities.property_id;
+    FROM property_amenities pa
+    WHERE pa.property_id = p_property_id;
 
     -- Add new amenities
     INSERT INTO property_amenities (property_id, amenity_id, is_free)
-    SELECT set_property_amenities.property_id,
-           unnest(amenity_ids),
+    SELECT p_property_id,
+           unnest(p_amenity_ids),
            TRUE;
 
     RETURN TRUE;

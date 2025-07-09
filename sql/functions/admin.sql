@@ -41,73 +41,74 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION approve_property_application(
-    property_id INT,
-    admin_id INT,
-    approval_notes TEXT DEFAULT NULL
+    p_property_id INT,
+    p_admin_id INT,
+    p_approval_notes TEXT DEFAULT NULL
 ) RETURNS BOOLEAN AS
 $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM admin_users WHERE admin_id = approve_property_application.admin_id) THEN
+    IF NOT EXISTS (SELECT 1 FROM admin_users au WHERE au.admin_id = p_admin_id) THEN
         RAISE EXCEPTION 'Invalid admin user';
     END IF;
 
-    UPDATE properties
+    UPDATE properties p
     SET property_status = 'active',
         content_status  = 'approved',
         updated_at      = CURRENT_TIMESTAMP
-    WHERE property_id = approve_property_application.property_id;
+    WHERE p.property_id = p_property_id;
 
     RETURN FOUND;
 END;
 $$ LANGUAGE plpgsql;
 
+
 CREATE OR REPLACE FUNCTION reject_property_application(
-    property_id INT,
-    admin_id INT,
-    rejection_reason TEXT
+    p_property_id INT,
+    p_admin_id INT,
+    p_rejection_reason TEXT
 ) RETURNS BOOLEAN AS
 $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM admin_users WHERE admin_id = reject_property_application.admin_id) THEN
+    IF NOT EXISTS (SELECT 1 FROM admin_users au WHERE au.admin_id = p_admin_id) THEN
         RAISE EXCEPTION 'Invalid admin user';
     END IF;
 
-    UPDATE properties
+    UPDATE properties p
     SET property_status = 'rejected',
         content_status  = 'rejected',
         updated_at      = CURRENT_TIMESTAMP
-    WHERE property_id = reject_property_application.property_id;
+    WHERE p.property_id = p_property_id;
 
     RETURN FOUND;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION create_coupon(
-    coupon_code TEXT,
-    coupon_name TEXT,
-    discount_type TEXT,
-    discount_value NUMERIC,
-    admin_id INT,
-    minimum_booking_amount NUMERIC DEFAULT NULL,
-    valid_from TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    valid_to TIMESTAMP DEFAULT CURRENT_TIMESTAMP + INTERVAL '30 days'
+    p_coupon_code TEXT,
+    p_coupon_name TEXT,
+    p_discount_type TEXT,
+    p_discount_value NUMERIC,
+    p_admin_id INT,
+    p_minimum_booking_amount NUMERIC DEFAULT NULL,
+    p_valid_from TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    p_valid_to TIMESTAMP DEFAULT CURRENT_TIMESTAMP + INTERVAL '30 days'
 ) RETURNS INT AS
 $$
 DECLARE
     new_coupon_id INT;
 BEGIN
-    IF discount_type NOT IN ('percentage', 'fixed_amount') THEN
+    IF p_discount_type NOT IN ('percentage', 'fixed_amount') THEN
         RAISE EXCEPTION 'Invalid discount type. Must be percentage or fixed_amount';
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM admin_users WHERE admin_id = create_coupon.admin_id) THEN
+    IF NOT EXISTS (SELECT 1 FROM admin_users au WHERE au.admin_id = p_admin_id) THEN
         RAISE EXCEPTION 'Invalid admin user';
     END IF;
 
     INSERT INTO coupons (coupon_code, coupon_name, discount_type, discount_value,
                          minimum_booking_amount, valid_from, valid_to, created_by)
-    VALUES (coupon_code, coupon_name, discount_type, discount_value,
-            minimum_booking_amount, valid_from, valid_to, admin_id)
+    VALUES (p_coupon_code, p_coupon_name, p_discount_type, p_discount_value,
+            p_minimum_booking_amount, p_valid_from, p_valid_to, p_admin_id)
     RETURNING coupon_id INTO new_coupon_id;
 
     RETURN new_coupon_id;
@@ -115,43 +116,43 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION update_coupon_status(
-    coupon_id INT,
-    new_status TEXT,
-    admin_id INT
+    p_coupon_id INT,
+    p_new_status TEXT,
+    p_admin_id INT
 ) RETURNS BOOLEAN AS
 $$
 BEGIN
     -- Validate status
-    IF new_status NOT IN ('active', 'inactive', 'expired') THEN
+    IF p_new_status NOT IN ('active', 'inactive', 'expired') THEN
         RAISE EXCEPTION 'Invalid coupon status';
     END IF;
 
     -- Verify admin exists
-    IF NOT EXISTS (SELECT 1 FROM admin_users WHERE admin_id = update_coupon_status.admin_id) THEN
+    IF NOT EXISTS (SELECT 1 FROM admin_users au WHERE au.admin_id = p_admin_id) THEN
         RAISE EXCEPTION 'Invalid admin user';
     END IF;
 
-    UPDATE coupons
-    SET coupon_status = new_status
-    WHERE coupon_id = update_coupon_status.coupon_id;
+    UPDATE coupons c
+    SET coupon_status = p_new_status
+    WHERE c.coupon_id = p_coupon_id;
 
     RETURN FOUND;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION onboard_partner_with_property(
-    company_name TEXT,
-    contact_email TEXT,
-    password TEXT,
-    contact_person_first_name TEXT,
-    contact_person_last_name TEXT,
-    phone_number TEXT,
-    country_code TEXT,
-    property_name TEXT,
-    property_type TEXT,
-    star_rating INT,
-    city_name TEXT,
-    street_address TEXT
+    p_company_name TEXT,
+    p_contact_email TEXT,
+    p_password TEXT,
+    p_contact_person_first_name TEXT,
+    p_contact_person_last_name TEXT,
+    p_phone_number TEXT,
+    p_country_code TEXT,
+    p_property_name TEXT,
+    p_property_type TEXT,
+    p_star_rating INT,
+    p_city_name TEXT,
+    p_street_address TEXT
 )
     RETURNS TABLE
             (
@@ -167,36 +168,36 @@ DECLARE
     target_city_id     INT;
     target_location_id INT;
 BEGIN
-    SELECT country_id
+    SELECT co.country_id
     INTO target_country_id
-    FROM countries
-    WHERE country_code = onboard_partner_with_property.country_code;
+    FROM countries co
+    WHERE co.country_code = p_country_code;
 
     IF target_country_id IS NULL THEN
-        RAISE EXCEPTION 'Invalid country code: %', country_code;
+        RAISE EXCEPTION 'Invalid country code: %', p_country_code;
     END IF;
 
     INSERT INTO partners (company_name, contact_email, password_hash,
                           contact_person_first_name, contact_person_last_name,
                           phone_number, country_id, account_status, verification_status)
-    VALUES (company_name, contact_email, crypt(password, gen_salt('bf', 8)),
-            contact_person_first_name, contact_person_last_name,
-            phone_number, target_country_id, 'pending', 'unverified')
+    VALUES (p_company_name, p_contact_email, crypt(p_password, gen_salt('bf', 8)),
+            p_contact_person_first_name, p_contact_person_last_name,
+            p_phone_number, target_country_id, 'pending', 'unverified')
     RETURNING partner_id INTO new_partner_id;
 
-    SELECT city_id
+    SELECT c.city_id
     INTO target_city_id
-    FROM cities
-    WHERE city_name ILIKE onboard_partner_with_property.city_name;
+    FROM cities c
+    WHERE c.city_name ILIKE p_city_name;
 
     IF target_city_id IS NULL THEN
-        RAISE EXCEPTION 'City not found: %', city_name;
+        RAISE EXCEPTION 'City not found: %', p_city_name;
     END IF;
 
-    SELECT location_id
+    SELECT l.location_id
     INTO target_location_id
-    FROM locations
-    WHERE city_id = target_city_id
+    FROM locations l
+    WHERE l.city_id = target_city_id
     LIMIT 1;
 
     IF target_location_id IS NULL THEN
@@ -207,8 +208,8 @@ BEGIN
 
     INSERT INTO properties (partner_id, property_name, property_type, star_rating,
                             location_id, street_address, total_rooms, property_status, content_status)
-    VALUES (new_partner_id, property_name, property_type, star_rating,
-            target_location_id, street_address, 0, 'pending', 'draft')
+    VALUES (new_partner_id, p_property_name, p_property_type, p_star_rating,
+            target_location_id, p_street_address, 0, 'pending', 'draft')
     RETURNING property_id INTO new_property_id;
 
     RETURN QUERY SELECT new_partner_id, new_property_id;
@@ -253,7 +254,7 @@ BEGIN
 END;
 $coupons$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION authenticate_admin(admin_username TEXT, admin_password TEXT)
+CREATE OR REPLACE FUNCTION authenticate_admin(p_admin_username TEXT, p_admin_password TEXT)
     RETURNS TABLE
             (
                 admin_id       INT,
@@ -274,8 +275,8 @@ BEGIN
                a.department,
                a.account_status
         FROM admin_users a
-        WHERE a.username = admin_username
-          AND password_hash = crypt(admin_password, password_hash)
+        WHERE a.username = p_admin_username
+          AND a.password_hash = crypt(p_admin_password, a.password_hash)
           AND a.account_status = 'active';
 END;
 $auth$ LANGUAGE plpgsql;
@@ -313,18 +314,18 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION deactivate_coupon(
-    coupon_id INT,
-    admin_id INT
+    p_coupon_id INT,
+    p_admin_id INT
 ) RETURNS BOOLEAN AS
 $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM admin_users WHERE admin_id = deactivate_coupon.admin_id) THEN
+    IF NOT EXISTS (SELECT 1 FROM admin_users au WHERE au.admin_id = p_admin_id) THEN
         RAISE EXCEPTION 'Invalid admin user';
     END IF;
 
-    UPDATE coupons
+    UPDATE coupons c
     SET coupon_status = 'inactive'
-    WHERE coupon_id = deactivate_coupon.coupon_id;
+    WHERE c.coupon_id = p_coupon_id;
 
     RETURN FOUND;
 END;

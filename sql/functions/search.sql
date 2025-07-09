@@ -1,14 +1,14 @@
 CREATE OR REPLACE FUNCTION search_properties(
-    search_location TEXT DEFAULT '',
-    check_in_date DATE DEFAULT CURRENT_DATE,
-    check_out_date DATE DEFAULT CURRENT_DATE + 1,
-    guests INT DEFAULT 2,
-    min_price NUMERIC DEFAULT 0,
-    max_price NUMERIC DEFAULT 99999,
-    star_ratings INT[] DEFAULT '{}',
-    amenities_list TEXT[] DEFAULT '{}',
-    sort_by TEXT DEFAULT 'price',
-    limit_results INT DEFAULT 50
+    p_search_location TEXT DEFAULT '',
+    p_check_in_date DATE DEFAULT CURRENT_DATE,
+    p_check_out_date DATE DEFAULT CURRENT_DATE + 1,
+    p_guests INT DEFAULT 2,
+    p_min_price NUMERIC DEFAULT 0,
+    p_max_price NUMERIC DEFAULT 99999,
+    p_star_ratings INT[] DEFAULT '{}',
+    p_amenities_list TEXT[] DEFAULT '{}',
+    p_sort_by TEXT DEFAULT 'price',
+    p_limit_results INT DEFAULT 50
 )
     RETURNS TABLE
             (
@@ -52,34 +52,34 @@ BEGIN
                  LEFT JOIN reviews r ON p.property_id = r.property_id AND r.review_status = 'approved'
                  LEFT JOIN property_images pi ON p.property_id = pi.property_id AND pi.is_primary = true
         WHERE p.property_status = 'active'
-          AND (search_location = '' OR
-               c.city_name ILIKE '%' || search_location || '%' OR
-               l.location_name ILIKE '%' || search_location || '%' OR
-               p.property_name ILIKE '%' || search_location || '%')
-          AND rt.max_occupancy >= guests
-          AND a.available_date BETWEEN check_in_date AND check_out_date - INTERVAL '1 day'
+          AND (p_search_location = '' OR
+               c.city_name ILIKE '%' || p_search_location || '%' OR
+               l.location_name ILIKE '%' || p_search_location || '%' OR
+               p.property_name ILIKE '%' || p_search_location || '%')
+          AND rt.max_occupancy >= p_guests
+          AND a.available_date BETWEEN p_check_in_date AND p_check_out_date - INTERVAL '1 day'
           AND a.available_rooms > 0
-          AND a.rate BETWEEN min_price AND max_price
-          AND (star_ratings = '{}' OR p.star_rating = ANY (star_ratings))
-          AND (amenities_list = '{}' OR p.property_id IN (SELECT pa.property_id
+          AND a.rate BETWEEN p_min_price AND p_max_price
+          AND (p_star_ratings = '{}' OR p.star_rating = ANY (p_star_ratings))
+          AND (p_amenities_list = '{}' OR p.property_id IN (SELECT pa.property_id
                                                           FROM property_amenities pa
                                                                    JOIN amenities am ON pa.amenity_id = am.amenity_id
-                                                          WHERE am.amenity_name = ANY (amenities_list)
+                                                          WHERE am.amenity_name = ANY (p_amenities_list)
                                                           GROUP BY pa.property_id
-                                                          HAVING COUNT(DISTINCT am.amenity_name) >= array_length(amenities_list, 1)))
+                                                          HAVING COUNT(DISTINCT am.amenity_name) >= array_length(p_amenities_list, 1)))
         GROUP BY p.property_id, l.location_name, c.city_name, co.country_name, pi.image_url
-        HAVING MIN(a.rate) BETWEEN min_price AND max_price
+        HAVING MIN(a.rate) BETWEEN p_min_price AND p_max_price
         ORDER BY CASE
-                     WHEN sort_by = 'price' THEN MIN(a.rate)
-                     WHEN sort_by = 'rating' THEN -COALESCE(AVG(r.overall_rating), 0)
-                     WHEN sort_by = 'star_rating' THEN -p.star_rating
+                     WHEN p_sort_by = 'price' THEN MIN(a.rate)
+                     WHEN p_sort_by = 'rating' THEN -COALESCE(AVG(r.overall_rating), 0)
+                     WHEN p_sort_by = 'star_rating' THEN -p.star_rating
                      ELSE MIN(a.rate)
                      END
-        LIMIT limit_results;
+        LIMIT p_limit_results;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION get_property_details(target_property_id INT)
+CREATE OR REPLACE FUNCTION get_property_details(p_property_id INT)
     RETURNS TABLE
             (
                 property_id    INT,
@@ -124,12 +124,12 @@ BEGIN
                  JOIN cities c ON l.city_id = c.city_id
                  JOIN countries co ON c.country_id = co.country_id
                  LEFT JOIN reviews r ON p.property_id = r.property_id AND r.review_status = 'approved'
-        WHERE p.property_id = target_property_id
+        WHERE p.property_id = p_property_id
         GROUP BY p.property_id, l.location_name, c.city_name, co.country_name, c.latitude, c.longitude;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION get_property_amenities(target_property_id INT)
+CREATE OR REPLACE FUNCTION get_property_amenities(p_property_id INT)
     RETURNS TABLE
             (
                 amenity_name     TEXT,
@@ -145,12 +145,12 @@ BEGIN
                pa.is_free
         FROM property_amenities pa
                  JOIN amenities a ON pa.amenity_id = a.amenity_id
-        WHERE pa.property_id = target_property_id
+        WHERE pa.property_id = p_property_id
         ORDER BY a.amenity_category, a.amenity_name;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION get_property_images(target_property_id INT)
+CREATE OR REPLACE FUNCTION get_property_images(p_property_id INT)
     RETURNS TABLE
             (
                 image_url      TEXT,
@@ -167,16 +167,16 @@ BEGIN
                pi.display_order,
                pi.is_primary
         FROM property_images pi
-        WHERE pi.property_id = target_property_id
+        WHERE pi.property_id = p_property_id
         ORDER BY pi.is_primary DESC, pi.display_order, pi.image_id;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION get_available_room_types(
-    target_property_id INT,
-    check_in_date DATE,
-    check_out_date DATE,
-    guests INT DEFAULT 2
+    p_property_id INT,
+    p_check_in_date DATE,
+    p_check_out_date DATE,
+    p_guests INT DEFAULT 2
 )
     RETURNS TABLE
             (
@@ -207,10 +207,10 @@ BEGIN
                rt.total_rooms
         FROM room_types rt
                  JOIN availability a ON rt.room_type_id = a.room_type_id
-        WHERE rt.property_id = target_property_id
+        WHERE rt.property_id = p_property_id
           AND rt.room_status = 'active'
-          AND rt.max_occupancy >= guests
-          AND a.available_date BETWEEN check_in_date AND check_out_date - INTERVAL '1 day'
+          AND rt.max_occupancy >= p_guests
+          AND a.available_date BETWEEN p_check_in_date AND p_check_out_date - INTERVAL '1 day'
           AND a.available_rooms > 0
         GROUP BY rt.room_type_id
         HAVING MIN(a.available_rooms) > 0
@@ -218,7 +218,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION search_cities_autocomplete(search_term TEXT)
+CREATE OR REPLACE FUNCTION search_cities_autocomplete(p_search_term TEXT)
     RETURNS TABLE
             (
                 city_name      TEXT,
@@ -236,7 +236,7 @@ BEGIN
                  JOIN countries co ON c.country_id = co.country_id
                  JOIN locations l ON c.city_id = l.city_id
                  JOIN properties p ON l.location_id = p.location_id
-        WHERE c.city_name ILIKE '%' || search_term || '%'
+        WHERE c.city_name ILIKE '%' || p_search_term || '%'
           AND p.property_status = 'active'
         GROUP BY c.city_name, co.country_name
         HAVING COUNT(DISTINCT p.property_id) > 0

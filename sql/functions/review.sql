@@ -1,9 +1,9 @@
 CREATE OR REPLACE FUNCTION submit_review(
-    booking_id INT,
-    user_id INT,
-    overall_rating INT,
-    review_title TEXT DEFAULT NULL,
-    review_text TEXT DEFAULT NULL
+    p_booking_id INT,
+    p_user_id INT,
+    p_overall_rating INT,
+    p_review_title TEXT DEFAULT NULL,
+    p_review_text TEXT DEFAULT NULL
 ) RETURNS INT AS
 $$
 DECLARE
@@ -14,8 +14,8 @@ BEGIN
     INTO booking_record
     FROM bookings b
              JOIN properties p ON b.property_id = p.property_id
-    WHERE b.booking_id = submit_review.booking_id
-      AND b.user_id = submit_review.user_id
+    WHERE b.booking_id = p_booking_id
+      AND b.user_id = p_user_id
       AND b.booking_status = 'confirmed'
       AND b.check_out_date < CURRENT_DATE;
 
@@ -23,18 +23,18 @@ BEGIN
         RAISE EXCEPTION 'Booking not eligible for review';
     END IF;
 
-    IF EXISTS (SELECT 1 FROM reviews WHERE booking_id = submit_review.booking_id) THEN
+    IF EXISTS (SELECT 1 FROM reviews r WHERE r.booking_id = p_booking_id) THEN
         RAISE EXCEPTION 'Review already submitted for this booking';
     END IF;
 
-    IF overall_rating < 1 OR overall_rating > 10 THEN
+    IF p_overall_rating < 1 OR p_overall_rating > 10 THEN
         RAISE EXCEPTION 'Rating must be between 1 and 10';
     END IF;
 
     INSERT INTO reviews (booking_id, user_id, property_id, overall_rating,
                          review_title, review_text, review_status)
-    VALUES (booking_id, user_id, booking_record.property_id, overall_rating,
-            review_title, review_text, 'pending')
+    VALUES (p_booking_id, p_user_id, booking_record.property_id, p_overall_rating,
+            p_review_title, p_review_text, 'pending')
     RETURNING review_id INTO new_review_id;
 
     RETURN new_review_id;
@@ -42,10 +42,10 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION get_property_reviews(
-    target_property_id INT,
-    limit_count INT DEFAULT 20,
-    offset_count INT DEFAULT 0,
-    status_filter TEXT DEFAULT 'approved'
+    p_property_id INT,
+    p_limit_count INT DEFAULT 20,
+    p_offset_count INT DEFAULT 0,
+    p_status_filter TEXT DEFAULT 'approved'
 )
     RETURNS TABLE
             (
@@ -80,14 +80,14 @@ BEGIN
                  JOIN users u ON r.user_id = u.user_id
                  JOIN bookings b ON r.booking_id = b.booking_id
                  JOIN room_types rt ON b.room_type_id = rt.room_type_id
-        WHERE r.property_id = target_property_id
-          AND (status_filter = 'all' OR r.review_status = status_filter)
+        WHERE r.property_id = p_property_id
+          AND (p_status_filter = 'all' OR r.review_status = p_status_filter)
         ORDER BY r.created_at DESC
-        LIMIT limit_count OFFSET offset_count;
+        LIMIT p_limit_count OFFSET p_offset_count;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION get_property_review_summary(target_property_id INT)
+CREATE OR REPLACE FUNCTION get_property_review_summary(p_property_id INT)
     RETURNS TABLE
             (
                 total_reviews       BIGINT,
@@ -114,9 +114,9 @@ BEGIN
                    '10_star', COUNT(*) FILTER (WHERE overall_rating = 10)
            )
     INTO rating_dist
-    FROM reviews
-    WHERE property_id = target_property_id
-      AND review_status = 'approved';
+    FROM reviews r
+    WHERE r.property_id = p_property_id
+      AND r.review_status = 'approved';
 
     RETURN QUERY
         SELECT COUNT(r.review_id)                                                                 AS total_reviews,
@@ -124,14 +124,14 @@ BEGIN
                rating_dist                                                                        AS rating_distribution,
                COUNT(r.review_id) FILTER (WHERE r.created_at > CURRENT_DATE - INTERVAL '30 days') AS recent_review_count
         FROM reviews r
-        WHERE r.property_id = target_property_id
+        WHERE r.property_id = p_property_id
           AND r.review_status = 'approved';
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION get_user_reviews(
-    target_user_id INT,
-    limit_count INT DEFAULT 10
+    p_user_id INT,
+    p_limit_count INT DEFAULT 10
 )
     RETURNS TABLE
             (
@@ -163,16 +163,16 @@ BEGIN
         FROM reviews r
                  JOIN properties p ON r.property_id = p.property_id
                  JOIN bookings b ON r.booking_id = b.booking_id
-        WHERE r.user_id = target_user_id
+        WHERE r.user_id = p_user_id
         ORDER BY r.created_at DESC
-        LIMIT limit_count;
+        LIMIT p_limit_count;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION get_partner_reviews(
-    partner_id INT,
-    limit_count INT DEFAULT 20,
-    status_filter TEXT DEFAULT 'approved'
+    p_partner_id INT,
+    p_limit_count INT DEFAULT 20,
+    p_status_filter TEXT DEFAULT 'approved'
 )
     RETURNS TABLE
             (
@@ -203,9 +203,9 @@ BEGIN
                  JOIN properties p ON r.property_id = p.property_id
                  JOIN users u ON r.user_id = u.user_id
                  JOIN bookings b ON r.booking_id = b.booking_id
-        WHERE p.partner_id = get_partner_reviews.partner_id
-          AND (status_filter = 'all' OR r.review_status = status_filter)
+        WHERE p.partner_id = p_partner_id
+          AND (p_status_filter = 'all' OR r.review_status = p_status_filter)
         ORDER BY r.created_at DESC
-        LIMIT limit_count;
+        LIMIT p_limit_count;
 END;
 $$ LANGUAGE plpgsql;

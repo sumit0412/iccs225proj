@@ -1,10 +1,10 @@
 CREATE OR REPLACE FUNCTION register_user(
-    email TEXT,
-    password TEXT,
-    first_name TEXT,
-    last_name TEXT,
-    phone_number TEXT DEFAULT NULL,
-    country_code TEXT DEFAULT 'TH'
+    p_email TEXT,
+    p_password TEXT,
+    p_first_name TEXT,
+    p_last_name TEXT,
+    p_phone_number TEXT DEFAULT NULL,
+    p_country_code TEXT DEFAULT 'TH'
 )
     RETURNS TABLE
             (
@@ -19,29 +19,29 @@ DECLARE
     target_country_id INT;
 BEGIN
     -- Get country_id from country_code
-    SELECT country_id
+    SELECT c.country_id
     INTO target_country_id
-    FROM countries
-    WHERE country_code = register_user.country_code;
+    FROM countries c
+    WHERE c.country_code = p_country_code;
 
     IF target_country_id IS NULL THEN
         target_country_id := 1; -- Default to Thailand
     END IF;
 
     INSERT INTO users (email, password_hash, first_name, last_name, phone_number, country_id)
-    VALUES (email,
-            crypt(password, gen_salt('bf', 8)),
-            first_name,
-            last_name,
-            phone_number,
+    VALUES (p_email,
+            crypt(p_password, gen_salt('bf', 8)),
+            p_first_name,
+            p_last_name,
+            p_phone_number,
             target_country_id)
-    RETURNING user_id, created_at INTO new_user_id, new_created_at;
+    RETURNING users.user_id, users.created_at INTO new_user_id, new_created_at;
 
     RETURN QUERY SELECT new_user_id, new_created_at;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION authenticate_user(email TEXT, password TEXT)
+CREATE OR REPLACE FUNCTION authenticate_user(p_email TEXT, p_password TEXT)
     RETURNS TABLE
             (
                 user_id      INT,
@@ -54,10 +54,10 @@ AS
 $$
 BEGIN
     -- Update last login
-    UPDATE users
+    UPDATE users u
     SET last_login = CURRENT_TIMESTAMP
-    WHERE users.email = authenticate_user.email
-      AND password_hash = crypt(authenticate_user.password, password_hash);
+    WHERE u.email = p_email
+      AND u.password_hash = crypt(p_password, u.password_hash);
 
     RETURN QUERY
         SELECT u.user_id,
@@ -67,12 +67,12 @@ BEGIN
                u.last_login
         FROM users u
                  LEFT JOIN countries c ON u.country_id = c.country_id
-        WHERE u.email = authenticate_user.email
-          AND password_hash = crypt(authenticate_user.password, password_hash);
+        WHERE u.email = p_email
+          AND u.password_hash = crypt(p_password, u.password_hash);
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION get_booking_history(target_user_id INT)
+CREATE OR REPLACE FUNCTION get_booking_history(p_user_id INT)
     RETURNS TABLE
             (
                 booking_id        INT,
@@ -110,12 +110,12 @@ BEGIN
                  JOIN locations l ON p.location_id = l.location_id
                  JOIN cities c ON l.city_id = c.city_id
                  JOIN countries co ON c.country_id = co.country_id
-        WHERE b.user_id = target_user_id
+        WHERE b.user_id = p_user_id
         ORDER BY b.check_in_date DESC;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION get_user_profile(target_user_id INT)
+CREATE OR REPLACE FUNCTION get_user_profile(p_user_id INT)
     RETURNS TABLE
             (
                 user_id        INT,
@@ -146,36 +146,36 @@ BEGIN
         FROM users u
                  LEFT JOIN countries c ON u.country_id = c.country_id
                  LEFT JOIN bookings b ON u.user_id = b.user_id
-        WHERE u.user_id = target_user_id
+        WHERE u.user_id = p_user_id
         GROUP BY u.user_id, c.country_name;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION update_user_profile(
-    target_user_id INT,
-    new_first_name TEXT DEFAULT NULL,
-    new_last_name TEXT DEFAULT NULL,
-    new_phone_number TEXT DEFAULT NULL,
-    new_country_code TEXT DEFAULT NULL
+    p_user_id INT,
+    p_first_name TEXT DEFAULT NULL,
+    p_last_name TEXT DEFAULT NULL,
+    p_phone_number TEXT DEFAULT NULL,
+    p_country_code TEXT DEFAULT NULL
 ) RETURNS BOOLEAN AS
 $$
 DECLARE
     target_country_id INT;
 BEGIN
     -- Get country_id if country_code provided
-    IF new_country_code IS NOT NULL THEN
-        SELECT country_id
+    IF p_country_code IS NOT NULL THEN
+        SELECT co.country_id
         INTO target_country_id
-        FROM countries
-        WHERE country_code = new_country_code;
+        FROM countries co
+        WHERE co.country_code = p_country_code;
     END IF;
 
-    UPDATE users
-    SET first_name   = COALESCE(new_first_name, first_name),
-        last_name    = COALESCE(new_last_name, last_name),
-        phone_number = COALESCE(new_phone_number, phone_number),
-        country_id   = COALESCE(target_country_id, country_id)
-    WHERE user_id = target_user_id;
+    UPDATE users u
+    SET first_name   = COALESCE(p_first_name, u.first_name),
+        last_name    = COALESCE(p_last_name, u.last_name),
+        phone_number = COALESCE(p_phone_number, u.phone_number),
+        country_id   = COALESCE(target_country_id, u.country_id)
+    WHERE u.user_id = p_user_id;
 
     RETURN FOUND;
 END;
