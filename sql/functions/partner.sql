@@ -1,5 +1,4 @@
-CREATE
-    OR REPLACE FUNCTION update_room_availability(
+CREATE OR REPLACE FUNCTION update_room_availability(
     partner_id INT,
     room_type_id INT,
     dates DATE[],
@@ -10,12 +9,12 @@ $$
 DECLARE
     i INT;
 BEGIN
-    IF
-        NOT EXISTS (SELECT 1
-                    FROM room_types rt
-                             JOIN properties p ON rt.property_id = p.property_id
-                    WHERE rt.room_type_id = update_room_availability.room_type_id
-                      AND p.partner_id = update_room_availability.partner_id) THEN
+    -- Verify ownership
+    IF NOT EXISTS (SELECT 1
+                   FROM room_types rt
+                            JOIN properties p ON rt.property_id = p.property_id
+                   WHERE rt.room_type_id = update_room_availability.room_type_id
+                     AND p.partner_id = update_room_availability.partner_id) THEN
         RAISE EXCEPTION 'Room type not owned by partner';
     END IF;
 
@@ -40,11 +39,9 @@ BEGIN
                               updated_by      = EXCLUDED.updated_by;
         END LOOP;
 END;
-$$
-    LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
-CREATE
-    OR REPLACE FUNCTION get_partner_properties(partner_id INT)
+CREATE OR REPLACE FUNCTION get_partner_properties(partner_id INT)
     RETURNS TABLE
             (
                 property_id      INT,
@@ -86,11 +83,9 @@ BEGIN
         GROUP BY p.property_id, l.location_name, c.city_name
         ORDER BY p.created_at DESC;
 END;
-$$
-    LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
-CREATE
-    OR REPLACE FUNCTION get_property_bookings(
+CREATE OR REPLACE FUNCTION get_property_bookings(
     partner_id INT,
     property_id INT DEFAULT NULL,
     date_from DATE DEFAULT CURRENT_DATE - INTERVAL '30 days',
@@ -144,11 +139,9 @@ BEGIN
           AND b.check_in_date BETWEEN date_from AND date_to
         ORDER BY b.check_in_date DESC, b.created_at DESC;
 END;
-$$
-    LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
-CREATE
-    OR REPLACE FUNCTION get_partner_notifications(partner_id INT, limit_count INT DEFAULT 10)
+CREATE OR REPLACE FUNCTION get_partner_notifications(partner_id INT, limit_count INT DEFAULT 10)
     RETURNS TABLE
             (
                 notification_type TEXT,
@@ -158,71 +151,63 @@ CREATE
                 created_at        TIMESTAMP,
                 priority          TEXT
             )
-AS $
+AS
+$$
 BEGIN
-RETURN QUERY
-SELECT CASE
-           WHEN b.booking_status = 'confirmed' AND b.created_at > CURRENT_TIMESTAMP -
-                                                                  INTERVAL '24 hours' THEN 'New Booking'
-           WHEN pay.payment_status = 'completed' AND pay.processed_at
-               > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN 'Payment Received'
-           WHEN r.review_status = 'approved' AND r.created_at
-               > CURRENT_TIMESTAMP - INTERVAL '7 days' THEN 'New Review'
-           WHEN b.check_in_date = CURRENT_DATE THEN 'Check-in Today'
-           WHEN b.check_out_date = CURRENT_DATE THEN 'Check-out Today'
-           ELSE 'System Update'
-           END
-                                                                                                              AS notification_type,
-       CASE
-           WHEN b.booking_status = 'confirmed' AND b.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN
-               'New booking for ' || rt.room_type_name || ' from ' || b.guest_first_name || ' ' || b.guest_last_name
-           WHEN pay.payment_status = 'completed' AND pay.processed_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN
-               'Payment received: ' || pay.amount::TEXT || ' ' || pay.currency_code
-           WHEN r.review_status = 'approved' AND r.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days' THEN
-               'New review: ' || r.overall_rating::TEXT || '/10 stars'
-           WHEN b.check_in_date = CURRENT_DATE THEN
-               'Guest checking in today: ' || b.guest_first_name || ' ' || b.guest_last_name
-           WHEN b.check_out_date = CURRENT_DATE THEN
-               'Guest checking out today: ' || b.guest_first_name || ' ' || b.guest_last_name
-           ELSE 'System notification'
-           END
-                                                                                                              AS message,
-       p.property_name,
-       b.booking_reference,
-       GREATEST(b.created_at, COALESCE(pay.processed_at, b.created_at),
-                COALESCE(r.created_at, b.created_at))                                                         AS created_at,
-       CASE
-           WHEN b.check_in_date = CURRENT_DATE OR b.check_out_date = CURRENT_DATE THEN 'high'
-           WHEN b.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN 'medium'
-           ELSE 'low'
-           END
-                                                                                                              AS priority
-FROM bookings b
-         JOIN properties p ON b.property_id = p.property_id
-         JOIN room_types rt ON b.room_type_id = rt.room_type_id
-         LEFT JOIN payments pay ON b.booking_id = pay.booking_id
-         LEFT JOIN reviews r ON b.booking_id = r.booking_id
-WHERE p.partner_id = get_partner_notifications.partner_id
-  AND (
-    (b.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days') OR
-    (pay.processed_at > CURRENT_TIMESTAMP - INTERVAL '7 days') OR
-    (r.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days') OR
-    (b.check_in_date = CURRENT_DATE) OR
-    (b.check_out_date = CURRENT_DATE)
-    )
-ORDER BY CASE priority
-             WHEN 'high' THEN 1
-             WHEN 'medium' THEN 2
-             ELSE 3
-             END,
-         created_at DESC
-LIMIT limit_count;
+    RETURN QUERY
+        SELECT CASE
+                   WHEN b.booking_status = 'confirmed' AND b.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN 'New Booking'
+                   WHEN pay.payment_status = 'completed' AND pay.processed_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN 'Payment Received'
+                   WHEN r.review_status = 'approved' AND r.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days' THEN 'New Review'
+                   WHEN b.check_in_date = CURRENT_DATE THEN 'Check-in Today'
+                   WHEN b.check_out_date = CURRENT_DATE THEN 'Check-out Today'
+                   ELSE 'System Update'
+                   END AS notification_type,
+               CASE
+                   WHEN b.booking_status = 'confirmed' AND b.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN
+                       'New booking for ' || rt.room_type_name || ' from ' || b.guest_first_name || ' ' || b.guest_last_name
+                   WHEN pay.payment_status = 'completed' AND pay.processed_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN
+                       'Payment received: ' || pay.amount::TEXT || ' ' || pay.currency_code
+                   WHEN r.review_status = 'approved' AND r.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days' THEN
+                       'New review: ' || r.overall_rating::TEXT || '/10 stars'
+                   WHEN b.check_in_date = CURRENT_DATE THEN
+                       'Guest checking in today: ' || b.guest_first_name || ' ' || b.guest_last_name
+                   WHEN b.check_out_date = CURRENT_DATE THEN
+                       'Guest checking out today: ' || b.guest_first_name || ' ' || b.guest_last_name
+                   ELSE 'System notification'
+                   END AS message,
+               p.property_name,
+               b.booking_reference,
+               GREATEST(b.created_at, COALESCE(pay.processed_at, b.created_at), COALESCE(r.created_at, b.created_at)) AS created_at,
+               CASE
+                   WHEN b.check_in_date = CURRENT_DATE OR b.check_out_date = CURRENT_DATE THEN 'high'
+                   WHEN b.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN 'medium'
+                   ELSE 'low'
+                   END AS priority
+        FROM bookings b
+                 JOIN properties p ON b.property_id = p.property_id
+                 JOIN room_types rt ON b.room_type_id = rt.room_type_id
+                 LEFT JOIN payments pay ON b.booking_id = pay.booking_id
+                 LEFT JOIN reviews r ON b.booking_id = r.booking_id
+        WHERE p.partner_id = get_partner_notifications.partner_id
+          AND (
+            (b.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days') OR
+            (pay.processed_at > CURRENT_TIMESTAMP - INTERVAL '7 days') OR
+            (r.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days') OR
+            (b.check_in_date = CURRENT_DATE) OR
+            (b.check_out_date = CURRENT_DATE)
+            )
+        ORDER BY CASE priority
+                     WHEN 'high' THEN 1
+                     WHEN 'medium' THEN 2
+                     ELSE 3
+                     END,
+                 created_at DESC
+        LIMIT limit_count;
 END;
-$
-LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
-CREATE
-    OR REPLACE FUNCTION register_partner(
+CREATE OR REPLACE FUNCTION register_partner(
     company_name TEXT,
     contact_email TEXT,
     password TEXT,
@@ -236,41 +221,36 @@ CREATE
                 partner_id INT,
                 created_at TIMESTAMP
             )
-AS $
+AS
+$$
 DECLARE
-    new_partner_id INT;
-new_created_at
-TIMESTAMP;
-target_country_id
-INT;
+    new_partner_id    INT;
+    new_created_at    TIMESTAMP;
+    target_country_id INT;
 BEGIN
-SELECT country_id
-INTO target_country_id
-FROM countries
-WHERE country_code = register_partner.country_code;
+    -- Get country_id from country_code
+    SELECT country_id
+    INTO target_country_id
+    FROM countries
+    WHERE country_code = register_partner.country_code;
 
-IF
-target_country_id IS NULL THEN
-        target_country_id := 1;
-END IF;
+    IF target_country_id IS NULL THEN
+        target_country_id := 1; -- Default to Thailand
+    END IF;
 
-INSERT INTO partners (company_name, contact_email, password_hash,
-                      contact_person_first_name, contact_person_last_name,
-                      phone_number, country_id)
-VALUES (company_name, contact_email, crypt(password, gen_salt('bf', 8)),
-        contact_person_first_name, contact_person_last_name,
-        phone_number, target_country_id)
-RETURNING partner_id, created_at
-INTO new_partner_id, new_created_at;
+    INSERT INTO partners (company_name, contact_email, password_hash,
+                          contact_person_first_name, contact_person_last_name,
+                          phone_number, country_id)
+    VALUES (company_name, contact_email, crypt(password, gen_salt('bf', 8)),
+            contact_person_first_name, contact_person_last_name,
+            phone_number, target_country_id)
+    RETURNING partner_id, created_at INTO new_partner_id, new_created_at;
 
-RETURN QUERY
-SELECT new_partner_id, new_created_at;
+    RETURN QUERY SELECT new_partner_id, new_created_at;
 END;
-$
-LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
-CREATE
-    OR REPLACE FUNCTION authenticate_partner(email TEXT, password TEXT)
+CREATE OR REPLACE FUNCTION authenticate_partner(email TEXT, password TEXT)
     RETURNS TABLE
             (
                 partner_id          INT,
@@ -280,24 +260,23 @@ CREATE
                 account_status      TEXT,
                 verification_status TEXT
             )
-AS $
+AS
+$$
 BEGIN
-RETURN QUERY
-SELECT p.partner_id,
-       p.company_name,
-       p.contact_person_first_name || ' ' || p.contact_person_last_name AS contact_person_name,
-       p.contact_email,
-       p.account_status,
-       p.verification_status
-FROM partners p
-WHERE p.contact_email = authenticate_partner.email
-  AND password_hash = crypt(authenticate_partner.password, password_hash);
+    RETURN QUERY
+        SELECT p.partner_id,
+               p.company_name,
+               p.contact_person_first_name || ' ' || p.contact_person_last_name AS contact_person_name,
+               p.contact_email,
+               p.account_status,
+               p.verification_status
+        FROM partners p
+        WHERE p.contact_email = authenticate_partner.email
+          AND password_hash = crypt(authenticate_partner.password, password_hash);
 END;
-$
-LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
-CREATE
-    OR REPLACE FUNCTION create_property(
+CREATE OR REPLACE FUNCTION create_property(
     partner_id INT,
     property_name TEXT,
     property_type TEXT,
@@ -308,71 +287,63 @@ CREATE
     description TEXT DEFAULT NULL,
     contact_phone TEXT DEFAULT NULL,
     contact_email TEXT DEFAULT NULL
-) RETURNS INT AS $
+) RETURNS INT AS
+$$
 DECLARE
-    new_property_id INT;
-target_location_id
-INT;
-target_city_id
-INT;
+    new_property_id    INT;
+    target_location_id INT;
+    target_city_id     INT;
 BEGIN
-SELECT city_id
-INTO target_city_id
-FROM cities
-WHERE city_name ILIKE create_property.city_name;
+    -- Find city
+    SELECT city_id
+    INTO target_city_id
+    FROM cities
+    WHERE city_name ILIKE create_property.city_name;
 
-IF
-target_city_id IS NULL THEN
+    IF target_city_id IS NULL THEN
         RAISE EXCEPTION 'City not found: %', city_name;
-END IF;
+    END IF;
 
-IF
-location_name IS NOT NULL THEN
-SELECT location_id
-INTO target_location_id
-FROM locations
-WHERE city_id = target_city_id
-  AND location_name ILIKE create_property.location_name;
+    -- Handle location
+    IF location_name IS NOT NULL THEN
+        SELECT location_id
+        INTO target_location_id
+        FROM locations
+        WHERE city_id = target_city_id
+          AND location_name ILIKE create_property.location_name;
 
-IF
-target_location_id IS NULL THEN
-INSERT INTO locations (location_name, city_id, area_type)
-VALUES (location_name, target_city_id, 'General Area')
-RETURNING location_id
-INTO target_location_id;
-END IF;
-ELSE
-SELECT location_id
-INTO target_location_id
-FROM locations
-WHERE city_id = target_city_id
-LIMIT 1;
+        IF target_location_id IS NULL THEN
+            INSERT INTO locations (location_name, city_id, area_type)
+            VALUES (location_name, target_city_id, 'General Area')
+            RETURNING location_id INTO target_location_id;
+        END IF;
+    ELSE
+        SELECT location_id
+        INTO target_location_id
+        FROM locations
+        WHERE city_id = target_city_id
+        LIMIT 1;
 
-IF
-target_location_id IS NULL THEN
-INSERT INTO locations (location_name, city_id, area_type)
-VALUES ('City Center', target_city_id, 'General Area')
-RETURNING location_id
-INTO target_location_id;
-END IF;
-END IF;
+        IF target_location_id IS NULL THEN
+            INSERT INTO locations (location_name, city_id, area_type)
+            VALUES ('City Center', target_city_id, 'General Area')
+            RETURNING location_id INTO target_location_id;
+        END IF;
+    END IF;
 
-INSERT INTO properties (partner_id, property_name, property_type, star_rating,
-                        location_id, street_address, description, total_rooms,
-                        contact_phone, contact_email)
-VALUES (partner_id, property_name, property_type, star_rating,
-        target_location_id, street_address, description, 0, -- Will be updated when rooms added
-        contact_phone, contact_email)
-RETURNING property_id
-INTO new_property_id;
+    INSERT INTO properties (partner_id, property_name, property_type, star_rating,
+                            location_id, street_address, description, total_rooms,
+                            contact_phone, contact_email)
+    VALUES (partner_id, property_name, property_type, star_rating,
+            target_location_id, street_address, description, 0,
+            contact_phone, contact_email)
+    RETURNING property_id INTO new_property_id;
 
-RETURN new_property_id;
+    RETURN new_property_id;
 END;
-$
-LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
-CREATE
-    OR REPLACE FUNCTION add_room_type(
+CREATE OR REPLACE FUNCTION add_room_type(
     property_id INT,
     partner_id INT,
     room_type_name TEXT,
@@ -383,37 +354,35 @@ CREATE
     base_rate NUMERIC,
     currency_code TEXT,
     total_rooms INT
-) RETURNS INT AS $
+) RETURNS INT AS
+$$
 DECLARE
     new_room_type_id INT;
 BEGIN
-IF
-NOT EXISTS (
-        SELECT 1
-        FROM properties p
-        WHERE p.property_id = add_room_type.property_id 
-        AND p.partner_id = add_room_type.partner_id
-    ) THEN
+    -- Verify ownership
+    IF NOT EXISTS (SELECT 1
+                   FROM properties p
+                   WHERE p.property_id = add_room_type.property_id
+                     AND p.partner_id = add_room_type.partner_id) THEN
         RAISE EXCEPTION 'Property not owned by partner';
-END IF;
+    END IF;
 
-INSERT INTO room_types (property_id, room_type_name, max_occupancy, max_adults,
-                        max_children, bed_configuration, base_rate, currency_code, total_rooms)
-VALUES (property_id, room_type_name, max_occupancy, max_adults,
-        max_children, bed_configuration, base_rate, currency_code, total_rooms)
-RETURNING room_type_id
-INTO new_room_type_id;
+    INSERT INTO room_types (property_id, room_type_name, max_occupancy, max_adults,
+                            max_children, bed_configuration, base_rate, currency_code, total_rooms)
+    VALUES (property_id, room_type_name, max_occupancy, max_adults,
+            max_children, bed_configuration, base_rate, currency_code, total_rooms)
+    RETURNING room_type_id INTO new_room_type_id;
 
-UPDATE properties
-SET total_rooms = (SELECT SUM(rt.total_rooms)
-                   FROM room_types rt
-                   WHERE rt.property_id = add_room_type.property_id)
-WHERE property_id = add_room_type.property_id;
+    -- Update property total rooms
+    UPDATE properties
+    SET total_rooms = (SELECT SUM(rt.total_rooms)
+                       FROM room_types rt
+                       WHERE rt.property_id = add_room_type.property_id)
+    WHERE property_id = add_room_type.property_id;
 
-RETURN new_room_type_id;
+    RETURN new_room_type_id;
 END;
-$
-LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION add_property_image(
     property_id INT,
@@ -423,7 +392,7 @@ CREATE OR REPLACE FUNCTION add_property_image(
     display_order INT DEFAULT 0,
     is_primary BOOLEAN DEFAULT FALSE
 ) RETURNS INT AS
-$image$
+$$
 DECLARE
     new_image_id INT;
 BEGIN
@@ -440,14 +409,14 @@ BEGIN
 
     RETURN new_image_id;
 END;
-$image$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION set_property_amenities(
     property_id INT,
     partner_id INT,
     amenity_ids INT[]
 ) RETURNS BOOLEAN AS
-$amenities$
+$$
 BEGIN
     IF NOT EXISTS (SELECT 1
                    FROM properties p
@@ -456,10 +425,10 @@ BEGIN
         RAISE EXCEPTION 'Property not owned by partner';
     END IF;
 
-    DELETE
-    FROM property_amenities
+    DELETE FROM property_amenities
     WHERE property_id = set_property_amenities.property_id;
 
+    -- Add new amenities
     INSERT INTO property_amenities (property_id, amenity_id, is_free)
     SELECT set_property_amenities.property_id,
            unnest(amenity_ids),
@@ -467,4 +436,4 @@ BEGIN
 
     RETURN TRUE;
 END;
-$amenities$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
