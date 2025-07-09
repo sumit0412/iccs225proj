@@ -1,16 +1,20 @@
 BEGIN;
 
 SELECT 'Testing admin authentication...' AS test_name;
-SELECT * FROM authenticate_admin('sarah.johnson', 'admin123');
+SELECT *
+FROM authenticate_admin('sarah.johnson', 'admin123');
 
 SELECT 'Testing financial report...' AS test_name;
-SELECT * FROM generate_financial_report(CURRENT_DATE - INTERVAL '30 days', CURRENT_DATE);
+SELECT *
+FROM generate_financial_report(CURRENT_DATE - INTERVAL '30 days', CURRENT_DATE);
 
 SELECT 'Testing pending applications...' AS test_name;
-SELECT * FROM get_pending_property_applications(10);
+SELECT *
+FROM get_pending_property_applications(10);
 
 SELECT 'Testing platform statistics...' AS test_name;
-SELECT * FROM get_platform_statistics();
+SELECT *
+FROM get_platform_statistics();
 
 SELECT 'Testing coupon creation...' AS test_name;
 SELECT create_coupon(
@@ -25,10 +29,12 @@ SELECT create_coupon(
        );
 
 SELECT 'Testing active coupons...' AS test_name;
-SELECT * FROM get_active_coupons();
+SELECT *
+FROM get_active_coupons();
 
 SELECT 'Testing partner onboarding...' AS test_name;
-SELECT * FROM onboard_partner_with_property(
+SELECT *
+FROM onboard_partner_with_property(
         'New Test Hotel',
         'newtest@hotel.com',
         'password123',
@@ -41,9 +47,10 @@ SELECT * FROM onboard_partner_with_property(
         3,
         'Bangkok',
         '123 New Test Street'
-              );
+     );
 
 SELECT 'Testing pending reviews...' AS test_name;
-SELECT * FROM get_pending_reviews_for_moderation(5);
+SELECT *
+FROM get_pending_reviews_for_moderation(5);
 
 ROLLBACK;

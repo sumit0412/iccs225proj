@@ -1,7 +1,8 @@
 BEGIN;
 
 SELECT 'Testing booking creation...' AS test_name;
-SELECT * FROM create_booking(
+SELECT *
+FROM create_booking(
         1,
         1,
         1,
@@ -16,10 +17,11 @@ SELECT * FROM create_booking(
         '+66812345678',
         'Late check-in please',
         'credit_card'
-              );
+     );
 
 SELECT 'Testing booking details...' AS test_name;
-SELECT * FROM get_booking_details(1);
+SELECT *
+FROM get_booking_details(1);
 
 SELECT 'Testing booking modification...' AS test_name;
 SELECT modify_booking(1, CURRENT_DATE + 21, CURRENT_DATE + 24, 1, 'Updated special requests');
