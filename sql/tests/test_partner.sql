@@ -12,7 +12,7 @@ SELECT * FROM register_partner(
               );
 
 SELECT 'Testing partner authentication...' AS test_name;
-SELECT * FROM authenticate_partner('manager@grandhotelgroup.com', 'partner123');
+SELECT * FROM authenticate_partner('manager@bangkokgrand.com', 'partner123');
 
 SELECT 'Testing get partner properties...' AS test_name;
 SELECT * FROM get_partner_properties(1);

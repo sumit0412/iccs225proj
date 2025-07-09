@@ -1,7 +1,7 @@
 BEGIN;
 
 SELECT 'Testing review submission...' AS test_name;
-SELECT submit_review(1, 1, 9, 'Great stay!', 'Excellent service and clean rooms. Highly recommend.');
+SELECT submit_review(10, 10, 9, 'Great stay!', 'Excellent service and clean rooms. Highly recommend.');
 
 SELECT 'Testing get property reviews...' AS test_name;
 SELECT * FROM get_property_reviews(1, 10, 0, 'approved');

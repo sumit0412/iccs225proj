@@ -4,7 +4,7 @@ SELECT 'Testing user registration...' AS test_name;
 SELECT * FROM register_user('newuser@example.com', 'password123', 'John', 'Doe', '+66812345999', 'TH');
 
 SELECT 'Testing user authentication...' AS test_name;
-SELECT * FROM authenticate_user('john.customer@gmail.com', 'password123');
+SELECT * FROM authenticate_user('john.smith@email.com', 'password123');
 
 SELECT 'Testing user profile...' AS test_name;
 SELECT * FROM get_user_profile(1);

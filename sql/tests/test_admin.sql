@@ -1,7 +1,7 @@
 BEGIN;
 
 SELECT 'Testing admin authentication...' AS test_name;
-SELECT * FROM authenticate_admin('admin_sarah', 'admin123');
+SELECT * FROM authenticate_admin('sarah.johnson', 'admin123');
 
 SELECT 'Testing financial report...' AS test_name;
 SELECT * FROM generate_financial_report(CURRENT_DATE - INTERVAL '30 days', CURRENT_DATE);

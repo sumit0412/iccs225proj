@@ -7,7 +7,7 @@ SELECT 'Testing search with price filters...' AS test_name;
 SELECT * FROM search_properties('Phuket', CURRENT_DATE + 10, CURRENT_DATE + 13, 2, 1000, 5000);
 
 SELECT 'Testing search with amenities...' AS test_name;
-SELECT * FROM search_properties('Chiang Mai', CURRENT_DATE + 15, CURRENT_DATE + 18, 2, 0, 10000, '{}', ARRAY['Free WiFi', 'Swimming Pool']);
+SELECT * FROM search_properties('Bangkok', CURRENT_DATE + 15, CURRENT_DATE + 18, 2, 0, 10000, '{}', ARRAY['Free WiFi', 'Swimming Pool']);
 
 SELECT 'Testing property details...' AS test_name;
 SELECT * FROM get_property_details(1);
