@@ -282,8 +282,8 @@ CREATE OR REPLACE FUNCTION create_property(
     property_type TEXT,
     star_rating INT,
     city_name TEXT,
-    location_name TEXT DEFAULT NULL,
     street_address TEXT,
+    location_name TEXT DEFAULT NULL,
     description TEXT DEFAULT NULL,
     contact_phone TEXT DEFAULT NULL,
     contact_email TEXT DEFAULT NULL
