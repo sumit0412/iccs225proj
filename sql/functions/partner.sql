@@ -156,17 +156,22 @@ $$
 BEGIN
     RETURN QUERY
         SELECT CASE
-                   WHEN b.booking_status = 'confirmed' AND b.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN 'New Booking'
-                   WHEN pay.payment_status = 'completed' AND pay.processed_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN 'Payment Received'
-                   WHEN r.review_status = 'approved' AND r.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days' THEN 'New Review'
+                   WHEN b.booking_status = 'confirmed' AND b.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
+                       THEN 'New Booking'
+                   WHEN pay.payment_status = 'completed' AND pay.processed_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
+                       THEN 'Payment Received'
+                   WHEN r.review_status = 'approved' AND r.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days'
+                       THEN 'New Review'
                    WHEN b.check_in_date = CURRENT_DATE THEN 'Check-in Today'
                    WHEN b.check_out_date = CURRENT_DATE THEN 'Check-out Today'
                    ELSE 'System Update'
-                   END AS notification_type,
+                   END                                        AS notification_type,
                CASE
                    WHEN b.booking_status = 'confirmed' AND b.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN
-                       'New booking for ' || rt.room_type_name || ' from ' || b.guest_first_name || ' ' || b.guest_last_name
-                   WHEN pay.payment_status = 'completed' AND pay.processed_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN
+                       'New booking for ' || rt.room_type_name || ' from ' || b.guest_first_name || ' ' ||
+                       b.guest_last_name
+                   WHEN pay.payment_status = 'completed' AND pay.processed_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
+                       THEN
                        'Payment received: ' || pay.amount::TEXT || ' ' || pay.currency_code
                    WHEN r.review_status = 'approved' AND r.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days' THEN
                        'New review: ' || r.overall_rating::TEXT || '/10 stars'
@@ -175,15 +180,16 @@ BEGIN
                    WHEN b.check_out_date = CURRENT_DATE THEN
                        'Guest checking out today: ' || b.guest_first_name || ' ' || b.guest_last_name
                    ELSE 'System notification'
-                   END AS message,
+                   END                                        AS message,
                p.property_name,
                b.booking_reference,
-               GREATEST(b.created_at, COALESCE(pay.processed_at, b.created_at), COALESCE(r.created_at, b.created_at)) AS created_at,
+               GREATEST(b.created_at, COALESCE(pay.processed_at, b.created_at),
+                        COALESCE(r.created_at, b.created_at)) AS created_at,
                CASE
                    WHEN b.check_in_date = CURRENT_DATE OR b.check_out_date = CURRENT_DATE THEN 'high'
                    WHEN b.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN 'medium'
                    ELSE 'low'
-                   END AS priority
+                   END                                        AS priority
         FROM bookings b
                  JOIN properties p ON b.property_id = p.property_id
                  JOIN room_types rt ON b.room_type_id = rt.room_type_id
@@ -425,7 +431,8 @@ BEGIN
         RAISE EXCEPTION 'Property not owned by partner';
     END IF;
 
-    DELETE FROM property_amenities
+    DELETE
+    FROM property_amenities
     WHERE property_id = set_property_amenities.property_id;
 
     -- Add new amenities

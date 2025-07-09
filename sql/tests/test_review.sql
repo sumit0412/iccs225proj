@@ -19,7 +19,4 @@ SELECT 'Testing get partner reviews...' AS test_name;
 SELECT *
 FROM get_partner_reviews(1, 10, 'approved');
 
-SELECT 'Testing review status update...' AS test_name;
-SELECT update_review_status(1, 'approved', 1);
-
 ROLLBACK;

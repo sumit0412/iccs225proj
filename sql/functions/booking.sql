@@ -24,11 +24,11 @@ $$
 DECLARE
     new_booking_id        INT;
     new_booking_reference TEXT;
-    calculated_total NUMERIC;
-    total_nights INT;
-    date_iterator DATE;
-    room_rate NUMERIC;
-    currency VARCHAR(3);
+    calculated_total      NUMERIC;
+    total_nights          INT;
+    date_iterator         DATE;
+    room_rate             NUMERIC;
+    currency              VARCHAR(3);
 BEGIN
     -- Validate dates
     IF check_out_date <= check_in_date THEN
@@ -91,7 +91,7 @@ BEGIN
         LOOP
             UPDATE availability
             SET available_rooms = available_rooms - total_rooms,
-                last_updated = CURRENT_TIMESTAMP
+                last_updated    = CURRENT_TIMESTAMP
             WHERE room_type_id = create_booking.room_type_id
               AND available_date = date_iterator;
         END LOOP;
@@ -105,7 +105,7 @@ CREATE OR REPLACE FUNCTION cancel_booking(target_booking_id INT, user_id INT DEF
 $$
 DECLARE
     booking_record RECORD;
-    date_iterator DATE;
+    date_iterator  DATE;
 BEGIN
     -- Get booking details
     SELECT *
@@ -143,7 +143,7 @@ BEGIN
         LOOP
             UPDATE availability
             SET available_rooms = available_rooms + booking_record.total_rooms,
-                last_updated = CURRENT_TIMESTAMP
+                last_updated    = CURRENT_TIMESTAMP
             WHERE room_type_id = booking_record.room_type_id
               AND available_date = date_iterator;
         END LOOP;
@@ -225,11 +225,11 @@ CREATE OR REPLACE FUNCTION modify_booking(
 ) RETURNS BOOLEAN AS
 $$
 DECLARE
-    booking_record RECORD;
+    booking_record   RECORD;
     new_total_nights INT;
     new_total_amount NUMERIC;
-    date_iterator DATE;
-    room_rate NUMERIC;
+    date_iterator    DATE;
+    room_rate        NUMERIC;
 BEGIN
     -- Get current booking details
     SELECT *
@@ -283,7 +283,7 @@ BEGIN
             LOOP
                 UPDATE availability
                 SET available_rooms = available_rooms + booking_record.total_rooms,
-                    last_updated = CURRENT_TIMESTAMP
+                    last_updated    = CURRENT_TIMESTAMP
                 WHERE room_type_id = booking_record.room_type_id
                   AND available_date = date_iterator;
             END LOOP;
@@ -294,7 +294,7 @@ BEGIN
             LOOP
                 UPDATE availability
                 SET available_rooms = available_rooms - new_total_rooms,
-                    last_updated = CURRENT_TIMESTAMP
+                    last_updated    = CURRENT_TIMESTAMP
                 WHERE room_type_id = booking_record.room_type_id
                   AND available_date = date_iterator;
             END LOOP;

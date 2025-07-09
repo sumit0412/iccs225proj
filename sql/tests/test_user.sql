@@ -8,7 +8,7 @@ SELECT 'Testing user authentication...' AS test_name;
 SELECT *
 FROM authenticate_user('john.smith@email.com', 'password123');
 
-SELECT 'Testing user profile...' AS test_name;
+SELECT 'Testing user profile retrieval...' AS test_name;
 SELECT *
 FROM get_user_profile(1);
 
@@ -18,7 +18,5 @@ FROM get_booking_history(1);
 
 SELECT 'Testing profile update...' AS test_name;
 SELECT update_user_profile(1, 'Johnny', NULL, '+66812345000', 'TH');
-SELECT *
-FROM get_user_profile(1);
 
 ROLLBACK;

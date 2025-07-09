@@ -26,7 +26,8 @@ CREATE OR REPLACE FUNCTION search_properties(
                 primary_image_url   TEXT,
                 available_rooms     INT
             )
-AS $$
+AS
+$$
 BEGIN
     RETURN QUERY
         SELECT p.property_id,
@@ -98,7 +99,8 @@ CREATE OR REPLACE FUNCTION get_property_details(target_property_id INT)
                 latitude       DECIMAL,
                 longitude      DECIMAL
             )
-AS $$
+AS
+$$
 BEGIN
     RETURN QUERY
         SELECT p.property_id,
@@ -134,7 +136,8 @@ CREATE OR REPLACE FUNCTION get_property_amenities(target_property_id INT)
                 amenity_category TEXT,
                 is_free          BOOLEAN
             )
-AS $$
+AS
+$$
 BEGIN
     RETURN QUERY
         SELECT a.amenity_name,
@@ -155,7 +158,8 @@ CREATE OR REPLACE FUNCTION get_property_images(target_property_id INT)
                 display_order  INT,
                 is_primary     BOOLEAN
             )
-AS $$
+AS
+$$
 BEGIN
     RETURN QUERY
         SELECT pi.image_url,
@@ -187,7 +191,8 @@ CREATE OR REPLACE FUNCTION get_available_room_types(
                 available_rooms   INT,
                 total_rooms       INT
             )
-AS $$
+AS
+$$
 BEGIN
     RETURN QUERY
         SELECT rt.room_type_id,
@@ -220,7 +225,8 @@ CREATE OR REPLACE FUNCTION search_cities_autocomplete(search_term TEXT)
                 country_name   TEXT,
                 property_count BIGINT
             )
-AS $$
+AS
+$$
 BEGIN
     RETURN QUERY
         SELECT c.city_name,
