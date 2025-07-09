@@ -2,7 +2,7 @@ CREATE OR REPLACE FUNCTION submit_review(
     p_booking_id INT,
     p_user_id INT,
     p_overall_rating INT,
-    p_review_title TEXT DEFAULT NULL,
+    p_review_title VARCHAR(200) DEFAULT NULL,
     p_review_text TEXT DEFAULT NULL
 ) RETURNS INT AS
 $$
@@ -35,28 +35,29 @@ BEGIN
                          review_title, review_text, review_status)
     VALUES (p_booking_id, p_user_id, booking_record.property_id, p_overall_rating,
             p_review_title, p_review_text, 'pending')
-    RETURNING review_id INTO new_review_id;
+    RETURNING reviews.review_id INTO new_review_id;
 
     RETURN new_review_id;
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed get_property_reviews function
 CREATE OR REPLACE FUNCTION get_property_reviews(
     p_property_id INT,
     p_limit_count INT DEFAULT 20,
     p_offset_count INT DEFAULT 0,
-    p_status_filter TEXT DEFAULT 'approved'
+    p_status_filter VARCHAR(20) DEFAULT 'approved'
 )
     RETURNS TABLE
             (
                 review_id         INT,
-                user_name         TEXT,
+                user_name         VARCHAR(201), -- first_name + ' ' + last_name
                 overall_rating    INT,
-                review_title      TEXT,
+                review_title      VARCHAR(200),
                 review_text       TEXT,
-                review_status     TEXT,
-                booking_reference TEXT,
-                room_type_name    TEXT,
+                review_status     VARCHAR(20),
+                booking_reference VARCHAR(20),
+                room_type_name    VARCHAR(100),
                 check_in_date     DATE,
                 check_out_date    DATE,
                 created_at        TIMESTAMP
@@ -66,7 +67,7 @@ $$
 BEGIN
     RETURN QUERY
         SELECT r.review_id,
-               u.first_name || ' ' || u.last_name AS user_name,
+               (u.first_name || ' ' || u.last_name)::VARCHAR(201) AS user_name,
                r.overall_rating,
                r.review_title,
                r.review_text,
@@ -87,6 +88,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed get_property_review_summary function
 CREATE OR REPLACE FUNCTION get_property_review_summary(p_property_id INT)
     RETURNS TABLE
             (
@@ -129,6 +131,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed get_user_reviews function
 CREATE OR REPLACE FUNCTION get_user_reviews(
     p_user_id INT,
     p_limit_count INT DEFAULT 10
@@ -136,12 +139,12 @@ CREATE OR REPLACE FUNCTION get_user_reviews(
     RETURNS TABLE
             (
                 review_id         INT,
-                property_name     TEXT,
+                property_name     VARCHAR(200),
                 overall_rating    INT,
-                review_title      TEXT,
+                review_title      VARCHAR(200),
                 review_text       TEXT,
-                review_status     TEXT,
-                booking_reference TEXT,
+                review_status     VARCHAR(20),
+                booking_reference VARCHAR(20),
                 check_in_date     DATE,
                 check_out_date    DATE,
                 created_at        TIMESTAMP
@@ -169,21 +172,22 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed get_partner_reviews function
 CREATE OR REPLACE FUNCTION get_partner_reviews(
     p_partner_id INT,
     p_limit_count INT DEFAULT 20,
-    p_status_filter TEXT DEFAULT 'approved'
+    p_status_filter VARCHAR(20) DEFAULT 'approved'
 )
     RETURNS TABLE
             (
                 review_id         INT,
-                property_name     TEXT,
-                user_name         TEXT,
+                property_name     VARCHAR(200),
+                user_name         VARCHAR(201), -- first_name + ' ' + last_name
                 overall_rating    INT,
-                review_title      TEXT,
+                review_title      VARCHAR(200),
                 review_text       TEXT,
-                review_status     TEXT,
-                booking_reference TEXT,
+                review_status     VARCHAR(20),
+                booking_reference VARCHAR(20),
                 created_at        TIMESTAMP
             )
 AS
@@ -192,7 +196,7 @@ BEGIN
     RETURN QUERY
         SELECT r.review_id,
                p.property_name,
-               u.first_name || ' ' || u.last_name AS user_name,
+               (u.first_name || ' ' || u.last_name)::VARCHAR(201) AS user_name,
                r.overall_rating,
                r.review_title,
                r.review_text,

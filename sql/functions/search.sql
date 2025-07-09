@@ -1,29 +1,29 @@
 CREATE OR REPLACE FUNCTION search_properties(
-    p_search_location TEXT DEFAULT '',
+    p_search_location VARCHAR(200) DEFAULT '',
     p_check_in_date DATE DEFAULT CURRENT_DATE,
     p_check_out_date DATE DEFAULT CURRENT_DATE + 1,
     p_guests INT DEFAULT 2,
     p_min_price NUMERIC DEFAULT 0,
     p_max_price NUMERIC DEFAULT 99999,
     p_star_ratings INT[] DEFAULT '{}',
-    p_amenities_list TEXT[] DEFAULT '{}',
-    p_sort_by TEXT DEFAULT 'price',
+    p_amenities_list VARCHAR(100)[] DEFAULT '{}',
+    p_sort_by VARCHAR(20) DEFAULT 'price',
     p_limit_results INT DEFAULT 50
 )
     RETURNS TABLE
             (
                 property_id         INT,
-                property_name       TEXT,
-                property_type       TEXT,
+                property_name       VARCHAR(200),
+                property_type       VARCHAR(50),
                 star_rating         INT,
-                street_address      TEXT,
-                location_name       TEXT,
-                city_name           TEXT,
-                country_name        TEXT,
+                street_address      VARCHAR(300),
+                location_name       VARCHAR(200),
+                city_name           VARCHAR(100),
+                country_name        VARCHAR(100),
                 min_price_per_night NUMERIC,
                 avg_rating          NUMERIC,
                 total_reviews       BIGINT,
-                primary_image_url   TEXT,
+                primary_image_url   VARCHAR(500),
                 available_rooms     INT
             )
 AS
@@ -62,11 +62,11 @@ BEGIN
           AND a.rate BETWEEN p_min_price AND p_max_price
           AND (p_star_ratings = '{}' OR p.star_rating = ANY (p_star_ratings))
           AND (p_amenities_list = '{}' OR p.property_id IN (SELECT pa.property_id
-                                                          FROM property_amenities pa
-                                                                   JOIN amenities am ON pa.amenity_id = am.amenity_id
-                                                          WHERE am.amenity_name = ANY (p_amenities_list)
-                                                          GROUP BY pa.property_id
-                                                          HAVING COUNT(DISTINCT am.amenity_name) >= array_length(p_amenities_list, 1)))
+                                                            FROM property_amenities pa
+                                                                     JOIN amenities am ON pa.amenity_id = am.amenity_id
+                                                            WHERE am.amenity_name = ANY (p_amenities_list)
+                                                            GROUP BY pa.property_id
+                                                            HAVING COUNT(DISTINCT am.amenity_name) >= array_length(p_amenities_list, 1)))
         GROUP BY p.property_id, l.location_name, c.city_name, co.country_name, pi.image_url
         HAVING MIN(a.rate) BETWEEN p_min_price AND p_max_price
         ORDER BY CASE
@@ -79,20 +79,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed get_property_details function
 CREATE OR REPLACE FUNCTION get_property_details(p_property_id INT)
     RETURNS TABLE
             (
                 property_id    INT,
-                property_name  TEXT,
-                property_type  TEXT,
+                property_name  VARCHAR(200),
+                property_type  VARCHAR(50),
                 star_rating    INT,
                 description    TEXT,
-                street_address TEXT,
-                location_name  TEXT,
-                city_name      TEXT,
-                country_name   TEXT,
-                contact_phone  TEXT,
-                contact_email  TEXT,
+                street_address VARCHAR(300),
+                location_name  VARCHAR(200),
+                city_name      VARCHAR(100),
+                country_name   VARCHAR(100),
+                contact_phone  VARCHAR(20),
+                contact_email  VARCHAR(255),
                 total_rooms    INT,
                 avg_rating     NUMERIC,
                 total_reviews  BIGINT,
@@ -129,11 +130,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed get_property_amenities function
 CREATE OR REPLACE FUNCTION get_property_amenities(p_property_id INT)
     RETURNS TABLE
             (
-                amenity_name     TEXT,
-                amenity_category TEXT,
+                amenity_name     VARCHAR(100),
+                amenity_category VARCHAR(50),
                 is_free          BOOLEAN
             )
 AS
@@ -150,11 +152,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed get_property_images function
 CREATE OR REPLACE FUNCTION get_property_images(p_property_id INT)
     RETURNS TABLE
             (
-                image_url      TEXT,
-                image_category TEXT,
+                image_url      VARCHAR(500),
+                image_category VARCHAR(50),
                 display_order  INT,
                 is_primary     BOOLEAN
             )
@@ -172,6 +175,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed get_available_room_types function
 CREATE OR REPLACE FUNCTION get_available_room_types(
     p_property_id INT,
     p_check_in_date DATE,
@@ -181,13 +185,13 @@ CREATE OR REPLACE FUNCTION get_available_room_types(
     RETURNS TABLE
             (
                 room_type_id      INT,
-                room_type_name    TEXT,
+                room_type_name    VARCHAR(100),
                 max_occupancy     INT,
                 max_adults        INT,
                 max_children      INT,
-                bed_configuration TEXT,
+                bed_configuration VARCHAR(200),
                 current_rate      NUMERIC,
-                currency_code     TEXT,
+                currency_code     VARCHAR(3),
                 available_rooms   INT,
                 total_rooms       INT
             )
@@ -218,11 +222,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION search_cities_autocomplete(p_search_term TEXT)
+-- Fixed search_cities_autocomplete function
+CREATE OR REPLACE FUNCTION search_cities_autocomplete(p_search_term VARCHAR(200))
     RETURNS TABLE
             (
-                city_name      TEXT,
-                country_name   TEXT,
+                city_name      VARCHAR(100),
+                country_name   VARCHAR(100),
                 property_count BIGINT
             )
 AS

@@ -2,15 +2,15 @@ CREATE OR REPLACE FUNCTION get_pending_property_applications(limit_count INT DEF
     RETURNS TABLE
             (
                 property_id     INT,
-                property_name   TEXT,
-                property_type   TEXT,
-                partner_company TEXT,
-                contact_person  TEXT,
-                contact_email   TEXT,
-                city_name       TEXT,
-                country_name    TEXT,
-                property_status TEXT,
-                content_status  TEXT,
+                property_name   VARCHAR(200),
+                property_type   VARCHAR(50),
+                partner_company VARCHAR(200),
+                contact_person  VARCHAR(201), -- first_name + ' ' + last_name
+                contact_email   VARCHAR(255),
+                city_name       VARCHAR(100),
+                country_name    VARCHAR(100),
+                property_status VARCHAR(20),
+                content_status  VARCHAR(20),
                 created_at      TIMESTAMP
             )
 AS
@@ -20,8 +20,8 @@ BEGIN
         SELECT p.property_id,
                p.property_name,
                p.property_type,
-               pt.company_name                                                    AS partner_company,
-               pt.contact_person_first_name || ' ' || pt.contact_person_last_name AS contact_person,
+               pt.company_name                                                                    AS partner_company,
+               (pt.contact_person_first_name || ' ' || pt.contact_person_last_name)::VARCHAR(201) AS contact_person,
                pt.contact_email,
                c.city_name,
                co.country_name,
@@ -40,6 +40,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed approve_property_application function
 CREATE OR REPLACE FUNCTION approve_property_application(
     p_property_id INT,
     p_admin_id INT,
@@ -61,7 +62,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-
+-- Fixed reject_property_application function
 CREATE OR REPLACE FUNCTION reject_property_application(
     p_property_id INT,
     p_admin_id INT,
@@ -83,10 +84,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed create_coupon function
 CREATE OR REPLACE FUNCTION create_coupon(
-    p_coupon_code TEXT,
-    p_coupon_name TEXT,
-    p_discount_type TEXT,
+    p_coupon_code VARCHAR(50),
+    p_coupon_name VARCHAR(200),
+    p_discount_type VARCHAR(20),
     p_discount_value NUMERIC,
     p_admin_id INT,
     p_minimum_booking_amount NUMERIC DEFAULT NULL,
@@ -109,15 +111,16 @@ BEGIN
                          minimum_booking_amount, valid_from, valid_to, created_by)
     VALUES (p_coupon_code, p_coupon_name, p_discount_type, p_discount_value,
             p_minimum_booking_amount, p_valid_from, p_valid_to, p_admin_id)
-    RETURNING coupon_id INTO new_coupon_id;
+    RETURNING coupons.coupon_id INTO new_coupon_id;
 
     RETURN new_coupon_id;
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed update_coupon_status function
 CREATE OR REPLACE FUNCTION update_coupon_status(
     p_coupon_id INT,
-    p_new_status TEXT,
+    p_new_status VARCHAR(20),
     p_admin_id INT
 ) RETURNS BOOLEAN AS
 $$
@@ -140,19 +143,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed onboard_partner_with_property function
 CREATE OR REPLACE FUNCTION onboard_partner_with_property(
-    p_company_name TEXT,
-    p_contact_email TEXT,
-    p_password TEXT,
-    p_contact_person_first_name TEXT,
-    p_contact_person_last_name TEXT,
-    p_phone_number TEXT,
-    p_country_code TEXT,
-    p_property_name TEXT,
-    p_property_type TEXT,
+    p_company_name VARCHAR(200),
+    p_contact_email VARCHAR(255),
+    p_password VARCHAR(255),
+    p_contact_person_first_name VARCHAR(100),
+    p_contact_person_last_name VARCHAR(100),
+    p_phone_number VARCHAR(20),
+    p_country_code VARCHAR(2),
+    p_property_name VARCHAR(200),
+    p_property_type VARCHAR(50),
     p_star_rating INT,
-    p_city_name TEXT,
-    p_street_address TEXT
+    p_city_name VARCHAR(100),
+    p_street_address VARCHAR(300)
 )
     RETURNS TABLE
             (
@@ -183,7 +187,7 @@ BEGIN
     VALUES (p_company_name, p_contact_email, crypt(p_password, gen_salt('bf', 8)),
             p_contact_person_first_name, p_contact_person_last_name,
             p_phone_number, target_country_id, 'pending', 'unverified')
-    RETURNING partner_id INTO new_partner_id;
+    RETURNING partners.partner_id INTO new_partner_id;
 
     SELECT c.city_id
     INTO target_city_id
@@ -203,32 +207,33 @@ BEGIN
     IF target_location_id IS NULL THEN
         INSERT INTO locations (location_name, city_id, area_type)
         VALUES ('City Center', target_city_id, 'General Area')
-        RETURNING location_id INTO target_location_id;
+        RETURNING locations.location_id INTO target_location_id;
     END IF;
 
     INSERT INTO properties (partner_id, property_name, property_type, star_rating,
                             location_id, street_address, total_rooms, property_status, content_status)
     VALUES (new_partner_id, p_property_name, p_property_type, p_star_rating,
             target_location_id, p_street_address, 0, 'pending', 'draft')
-    RETURNING property_id INTO new_property_id;
+    RETURNING properties.property_id INTO new_property_id;
 
     RETURN QUERY SELECT new_partner_id, new_property_id;
 END;
 $onboard$ LANGUAGE plpgsql;
 
+-- Fixed get_active_coupons function
 CREATE OR REPLACE FUNCTION get_active_coupons()
     RETURNS TABLE
             (
                 coupon_id              INT,
-                coupon_code            TEXT,
-                coupon_name            TEXT,
-                discount_type          TEXT,
+                coupon_code            VARCHAR(50),
+                coupon_name            VARCHAR(200),
+                discount_type          VARCHAR(20),
                 discount_value         NUMERIC,
                 minimum_booking_amount NUMERIC,
                 valid_from             TIMESTAMP,
                 valid_to               TIMESTAMP,
-                coupon_status          TEXT,
-                created_by_admin       TEXT,
+                coupon_status          VARCHAR(20),
+                created_by_admin       VARCHAR(100),
                 created_at             TIMESTAMP
             )
 AS
@@ -254,7 +259,8 @@ BEGIN
 END;
 $coupons$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION authenticate_admin(p_admin_username TEXT, p_admin_password TEXT)
+-- Fixed authenticate_admin function
+CREATE OR REPLACE FUNCTION authenticate_admin(p_admin_username VARCHAR(100), p_admin_password VARCHAR(255))
     RETURNS TABLE
             (
                 admin_id       INT,
@@ -281,14 +287,15 @@ BEGIN
 END;
 $auth$ LANGUAGE plpgsql;
 
+-- Fixed get_properties_needing_content_review function
 CREATE OR REPLACE FUNCTION get_properties_needing_content_review(limit_count INT DEFAULT 20)
     RETURNS TABLE
             (
                 property_id       INT,
-                property_name     TEXT,
-                partner_company   TEXT,
-                content_status    TEXT,
-                issue_description TEXT,
+                property_name     VARCHAR(200),
+                partner_company   VARCHAR(200),
+                content_status    VARCHAR(20),
+                issue_description VARCHAR(100),
                 last_updated      TIMESTAMP
             )
 AS
@@ -300,9 +307,9 @@ BEGIN
                pt.company_name AS partner_company,
                p.content_status,
                CASE
-                   WHEN p.content_status = 'under_review' THEN 'Content updates requested'
-                   WHEN p.content_status = 'draft' THEN 'Initial content incomplete'
-                   ELSE 'Review required'
+                   WHEN p.content_status = 'under_review' THEN 'Content updates requested'::VARCHAR(100)
+                   WHEN p.content_status = 'draft' THEN 'Initial content incomplete'::VARCHAR(100)
+                   ELSE 'Review required'::VARCHAR(100)
                    END         AS issue_description,
                p.updated_at    AS last_updated
         FROM properties p
@@ -313,6 +320,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed deactivate_coupon function
 CREATE OR REPLACE FUNCTION deactivate_coupon(
     p_coupon_id INT,
     p_admin_id INT

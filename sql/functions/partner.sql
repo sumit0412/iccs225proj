@@ -45,12 +45,12 @@ CREATE OR REPLACE FUNCTION get_partner_properties(p_partner_id INT)
     RETURNS TABLE
             (
                 property_id      INT,
-                property_name    TEXT,
-                property_type    TEXT,
+                property_name    VARCHAR(200),
+                property_type    VARCHAR(50),
                 star_rating      INT,
-                location_name    TEXT,
-                city_name        TEXT,
-                property_status  TEXT,
+                location_name    VARCHAR(200),
+                city_name        VARCHAR(100),
+                property_status  VARCHAR(20),
                 total_rooms      INT,
                 total_room_types BIGINT,
                 total_bookings   BIGINT,
@@ -94,19 +94,18 @@ CREATE OR REPLACE FUNCTION get_property_bookings(
     RETURNS TABLE
             (
                 booking_id        INT,
-                booking_reference TEXT,
-                property_name     TEXT,
-                room_type_name    TEXT,
+                booking_reference VARCHAR(20),
+                property_name     VARCHAR(200),
+                room_type_name    VARCHAR(100),
                 check_in_date     DATE,
                 check_out_date    DATE,
                 total_nights      INT,
-                guest_name        TEXT,
-                guest_email       TEXT,
-                guest_phone       TEXT,
+                guest_name        VARCHAR(201), -- first_name + ' ' + last_name
+                guest_email       VARCHAR(255),
+                guest_phone       VARCHAR(20),
                 total_amount      NUMERIC,
-                currency_code     TEXT,
-                booking_status    TEXT,
-                payment_status    TEXT,
+                currency_code     VARCHAR(3),
+                booking_status    VARCHAR(20),
                 special_requests  TEXT,
                 created_at        TIMESTAMP
             )
@@ -121,19 +120,17 @@ BEGIN
                b.check_in_date,
                b.check_out_date,
                b.total_nights,
-               b.guest_first_name || ' ' || b.guest_last_name AS guest_name,
+               (b.guest_first_name || ' ' || b.guest_last_name)::VARCHAR(201) AS guest_name,
                b.guest_email,
                b.guest_phone,
                b.total_amount,
                b.currency_code,
                b.booking_status,
-               pay.payment_status,
                b.special_requests,
                b.created_at
         FROM bookings b
                  JOIN properties p ON b.property_id = p.property_id
                  JOIN room_types rt ON b.room_type_id = rt.room_type_id
-                 LEFT JOIN payments pay ON b.booking_id = pay.booking_id
         WHERE p.partner_id = p_partner_id
           AND (p_property_id IS NULL OR p.property_id = p_property_id)
           AND b.check_in_date BETWEEN p_date_from AND p_date_to
@@ -144,12 +141,12 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION get_partner_notifications(p_partner_id INT, p_limit_count INT DEFAULT 10)
     RETURNS TABLE
             (
-                notification_type TEXT,
+                notification_type VARCHAR(50),
                 message           TEXT,
-                property_name     TEXT,
-                booking_reference TEXT,
+                property_name     VARCHAR(200),
+                booking_reference VARCHAR(20),
                 created_at        TIMESTAMP,
-                priority          TEXT
+                priority          VARCHAR(10)
             )
 AS
 $$
@@ -157,22 +154,17 @@ BEGIN
     RETURN QUERY
         SELECT CASE
                    WHEN b.booking_status = 'confirmed' AND b.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
-                       THEN 'New Booking'
-                   WHEN pay.payment_status = 'completed' AND pay.processed_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
-                       THEN 'Payment Received'
+                       THEN 'New Booking'::VARCHAR(50)
                    WHEN r.review_status = 'approved' AND r.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days'
-                       THEN 'New Review'
-                   WHEN b.check_in_date = CURRENT_DATE THEN 'Check-in Today'
-                   WHEN b.check_out_date = CURRENT_DATE THEN 'Check-out Today'
-                   ELSE 'System Update'
+                       THEN 'New Review'::VARCHAR(50)
+                   WHEN b.check_in_date = CURRENT_DATE THEN 'Check-in Today'::VARCHAR(50)
+                   WHEN b.check_out_date = CURRENT_DATE THEN 'Check-out Today'::VARCHAR(50)
+                   ELSE 'System Update'::VARCHAR(50)
                    END                                        AS notification_type,
                CASE
                    WHEN b.booking_status = 'confirmed' AND b.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN
                        'New booking for ' || rt.room_type_name || ' from ' || b.guest_first_name || ' ' ||
                        b.guest_last_name
-                   WHEN pay.payment_status = 'completed' AND pay.processed_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
-                       THEN
-                       'Payment received: ' || pay.amount::TEXT || ' ' || pay.currency_code
                    WHEN r.review_status = 'approved' AND r.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days' THEN
                        'New review: ' || r.overall_rating::TEXT || '/10 stars'
                    WHEN b.check_in_date = CURRENT_DATE THEN
@@ -183,22 +175,19 @@ BEGIN
                    END                                        AS message,
                p.property_name,
                b.booking_reference,
-               GREATEST(b.created_at, COALESCE(pay.processed_at, b.created_at),
-                        COALESCE(r.created_at, b.created_at)) AS created_at,
+               GREATEST(b.created_at, COALESCE(r.created_at, b.created_at)) AS created_at,
                CASE
-                   WHEN b.check_in_date = CURRENT_DATE OR b.check_out_date = CURRENT_DATE THEN 'high'
-                   WHEN b.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN 'medium'
-                   ELSE 'low'
+                   WHEN b.check_in_date = CURRENT_DATE OR b.check_out_date = CURRENT_DATE THEN 'high'::VARCHAR(10)
+                   WHEN b.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours' THEN 'medium'::VARCHAR(10)
+                   ELSE 'low'::VARCHAR(10)
                    END                                        AS priority
         FROM bookings b
                  JOIN properties p ON b.property_id = p.property_id
                  JOIN room_types rt ON b.room_type_id = rt.room_type_id
-                 LEFT JOIN payments pay ON b.booking_id = pay.booking_id
                  LEFT JOIN reviews r ON b.booking_id = r.booking_id
         WHERE p.partner_id = p_partner_id
           AND (
             (b.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days') OR
-            (pay.processed_at > CURRENT_TIMESTAMP - INTERVAL '7 days') OR
             (r.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days') OR
             (b.check_in_date = CURRENT_DATE) OR
             (b.check_out_date = CURRENT_DATE)
@@ -214,13 +203,13 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION register_partner(
-    p_company_name TEXT,
-    p_contact_email TEXT,
-    p_password TEXT,
-    p_contact_person_first_name TEXT,
-    p_contact_person_last_name TEXT,
-    p_phone_number TEXT,
-    p_country_code TEXT DEFAULT 'TH'
+    p_company_name VARCHAR(200),
+    p_contact_email VARCHAR(255),
+    p_password VARCHAR(255),
+    p_contact_person_first_name VARCHAR(100),
+    p_contact_person_last_name VARCHAR(100),
+    p_phone_number VARCHAR(20),
+    p_country_code VARCHAR(2) DEFAULT 'TH'
 )
     RETURNS TABLE
             (
@@ -250,21 +239,21 @@ BEGIN
     VALUES (p_company_name, p_contact_email, crypt(p_password, gen_salt('bf', 8)),
             p_contact_person_first_name, p_contact_person_last_name,
             p_phone_number, target_country_id)
-    RETURNING partner_id, created_at INTO new_partner_id, new_created_at;
+    RETURNING partners.partner_id, partners.created_at INTO new_partner_id, new_created_at;
 
     RETURN QUERY SELECT new_partner_id, new_created_at;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION authenticate_partner(p_email TEXT, p_password TEXT)
+CREATE OR REPLACE FUNCTION authenticate_partner(p_email VARCHAR(255), p_password VARCHAR(255))
     RETURNS TABLE
             (
                 partner_id          INT,
-                company_name        TEXT,
-                contact_person_name TEXT,
-                contact_email       TEXT,
-                account_status      TEXT,
-                verification_status TEXT
+                company_name        VARCHAR(200),
+                contact_person_name VARCHAR(201), -- first_name + ' ' + last_name
+                contact_email       VARCHAR(255),
+                account_status      VARCHAR(20),
+                verification_status VARCHAR(20)
             )
 AS
 $$
@@ -272,7 +261,7 @@ BEGIN
     RETURN QUERY
         SELECT p.partner_id,
                p.company_name,
-               p.contact_person_first_name || ' ' || p.contact_person_last_name AS contact_person_name,
+               (p.contact_person_first_name || ' ' || p.contact_person_last_name)::VARCHAR(201) AS contact_person_name,
                p.contact_email,
                p.account_status,
                p.verification_status
@@ -284,15 +273,15 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION create_property(
     p_partner_id INT,
-    p_property_name TEXT,
-    p_property_type TEXT,
+    p_property_name VARCHAR(200),
+    p_property_type VARCHAR(50),
     p_star_rating INT,
-    p_city_name TEXT,
-    p_street_address TEXT,
-    p_location_name TEXT DEFAULT NULL,
+    p_city_name VARCHAR(100),
+    p_street_address VARCHAR(300),
+    p_location_name VARCHAR(200) DEFAULT NULL,
     p_description TEXT DEFAULT NULL,
-    p_contact_phone TEXT DEFAULT NULL,
-    p_contact_email TEXT DEFAULT NULL
+    p_contact_phone VARCHAR(20) DEFAULT NULL,
+    p_contact_email VARCHAR(255) DEFAULT NULL
 ) RETURNS INT AS
 $$
 DECLARE
@@ -321,7 +310,7 @@ BEGIN
         IF target_location_id IS NULL THEN
             INSERT INTO locations (location_name, city_id, area_type)
             VALUES (p_location_name, target_city_id, 'General Area')
-            RETURNING location_id INTO target_location_id;
+            RETURNING locations.location_id INTO target_location_id;
         END IF;
     ELSE
         SELECT l.location_id
@@ -333,7 +322,7 @@ BEGIN
         IF target_location_id IS NULL THEN
             INSERT INTO locations (location_name, city_id, area_type)
             VALUES ('City Center', target_city_id, 'General Area')
-            RETURNING location_id INTO target_location_id;
+            RETURNING locations.location_id INTO target_location_id;
         END IF;
     END IF;
 
@@ -352,13 +341,13 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION add_room_type(
     p_property_id INT,
     p_partner_id INT,
-    p_room_type_name TEXT,
+    p_room_type_name VARCHAR(100),
     p_max_occupancy INT,
     p_max_adults INT,
     p_max_children INT,
-    p_bed_configuration TEXT,
+    p_bed_configuration VARCHAR(200),
     p_base_rate NUMERIC,
-    p_currency_code TEXT,
+    p_currency_code VARCHAR(3),
     p_total_rooms INT
 ) RETURNS INT AS
 $$
@@ -393,8 +382,8 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION add_property_image(
     p_property_id INT,
     p_partner_id INT,
-    p_image_url TEXT,
-    p_image_category TEXT DEFAULT 'general',
+    p_image_url VARCHAR(500),
+    p_image_category VARCHAR(50) DEFAULT 'general',
     p_display_order INT DEFAULT 0,
     p_is_primary BOOLEAN DEFAULT FALSE
 ) RETURNS INT AS
@@ -411,7 +400,7 @@ BEGIN
 
     INSERT INTO property_images (property_id, image_url, image_category, display_order, is_primary)
     VALUES (p_property_id, p_image_url, p_image_category, p_display_order, p_is_primary)
-    RETURNING image_id INTO new_image_id;
+    RETURNING property_images.image_id INTO new_image_id;
 
     RETURN new_image_id;
 END;

@@ -7,23 +7,23 @@ CREATE OR REPLACE FUNCTION create_booking(
     p_total_adults INT,
     p_total_children INT DEFAULT 0,
     p_total_rooms INT DEFAULT 1,
-    p_guest_first_name TEXT DEFAULT NULL,
-    p_guest_last_name TEXT DEFAULT NULL,
-    p_guest_email TEXT DEFAULT NULL,
-    p_guest_phone TEXT DEFAULT NULL,
+    p_guest_first_name VARCHAR(100) DEFAULT NULL,
+    p_guest_last_name VARCHAR(100) DEFAULT NULL,
+    p_guest_email VARCHAR(255) DEFAULT NULL,
+    p_guest_phone VARCHAR(20) DEFAULT NULL,
     p_special_requests TEXT DEFAULT NULL
 )
     RETURNS TABLE
             (
                 booking_id        INT,
-                booking_reference TEXT,
+                booking_reference VARCHAR(20),
                 total_amount      NUMERIC
             )
 AS
 $$
 DECLARE
     new_booking_id        INT;
-    new_booking_reference TEXT;
+    new_booking_reference VARCHAR(20);
     calculated_total      NUMERIC;
     total_nights          INT;
     date_iterator         DATE;
@@ -100,6 +100,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed cancel_booking function
 CREATE OR REPLACE FUNCTION cancel_booking(p_booking_id INT, p_user_id INT DEFAULT NULL)
     RETURNS BOOLEAN AS
 $$
@@ -152,13 +153,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed get_booking_details function
 CREATE OR REPLACE FUNCTION get_booking_details(p_booking_id INT)
     RETURNS TABLE
             (
                 booking_id        INT,
-                booking_reference TEXT,
-                property_name     TEXT,
-                room_type_name    TEXT,
+                booking_reference VARCHAR(20),
+                property_name     VARCHAR(200),
+                room_type_name    VARCHAR(100),
                 check_in_date     DATE,
                 check_out_date    DATE,
                 total_nights      INT,
@@ -166,17 +168,17 @@ CREATE OR REPLACE FUNCTION get_booking_details(p_booking_id INT)
                 total_children    INT,
                 total_rooms       INT,
                 total_amount      NUMERIC,
-                currency_code     TEXT,
-                booking_status    TEXT,
-                guest_first_name  TEXT,
-                guest_last_name   TEXT,
-                guest_email       TEXT,
-                guest_phone       TEXT,
+                currency_code     VARCHAR(3),
+                booking_status    VARCHAR(20),
+                guest_first_name  VARCHAR(100),
+                guest_last_name   VARCHAR(100),
+                guest_email       VARCHAR(255),
+                guest_phone       VARCHAR(20),
                 special_requests  TEXT,
-                property_address  TEXT,
-                city_name         TEXT,
-                country_name      TEXT,
-                contact_phone     TEXT,
+                property_address  VARCHAR(300),
+                city_name         VARCHAR(100),
+                country_name      VARCHAR(100),
+                contact_phone     VARCHAR(20),
                 created_at        TIMESTAMP
             )
 AS
@@ -216,6 +218,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed modify_booking function
 CREATE OR REPLACE FUNCTION modify_booking(
     p_booking_id INT,
     p_new_check_in_date DATE DEFAULT NULL,

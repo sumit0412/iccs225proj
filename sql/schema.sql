@@ -180,19 +180,6 @@ CREATE TABLE availability
     FOREIGN KEY (room_type_id) REFERENCES room_types (room_type_id) ON DELETE CASCADE
 );
 
-CREATE TABLE payments
-(
-    payment_id     SERIAL PRIMARY KEY,
-    booking_id     INTEGER        NOT NULL,
-    amount         DECIMAL(12, 2) NOT NULL,
-    currency_code  VARCHAR(3)     NOT NULL,
-    payment_method VARCHAR(50)    NOT NULL,
-    payment_status VARCHAR(20) DEFAULT 'pending',
-    transaction_id VARCHAR(100),
-    processed_at   TIMESTAMP,
-    created_at     TIMESTAMP   DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE bookings
 (
     booking_id        SERIAL PRIMARY KEY,
@@ -219,9 +206,6 @@ CREATE TABLE bookings
     FOREIGN KEY (property_id) REFERENCES properties (property_id),
     FOREIGN KEY (room_type_id) REFERENCES room_types (room_type_id)
 );
-
-ALTER TABLE payments
-    ADD FOREIGN KEY (booking_id) REFERENCES bookings (booking_id);
 
 CREATE TABLE coupons
 (

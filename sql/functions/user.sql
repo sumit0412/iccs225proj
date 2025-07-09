@@ -1,10 +1,10 @@
 CREATE OR REPLACE FUNCTION register_user(
-    p_email TEXT,
-    p_password TEXT,
-    p_first_name TEXT,
-    p_last_name TEXT,
-    p_phone_number TEXT DEFAULT NULL,
-    p_country_code TEXT DEFAULT 'TH'
+    p_email VARCHAR(255),
+    p_password VARCHAR(255),
+    p_first_name VARCHAR(100),
+    p_last_name VARCHAR(100),
+    p_phone_number VARCHAR(20) DEFAULT NULL,
+    p_country_code VARCHAR(2) DEFAULT 'TH'
 )
     RETURNS TABLE
             (
@@ -41,13 +41,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION authenticate_user(p_email TEXT, p_password TEXT)
+-- Fixed authenticate_user function
+CREATE OR REPLACE FUNCTION authenticate_user(p_email VARCHAR(255), p_password VARCHAR(255))
     RETURNS TABLE
             (
                 user_id      INT,
-                full_name    TEXT,
-                email        TEXT,
-                country_name TEXT,
+                full_name    VARCHAR(201), -- first_name + ' ' + last_name = 100 + 1 + 100 = 201
+                email        VARCHAR(255),
+                country_name VARCHAR(100),
                 last_login   TIMESTAMP
             )
 AS
@@ -61,7 +62,7 @@ BEGIN
 
     RETURN QUERY
         SELECT u.user_id,
-               u.first_name || ' ' || u.last_name AS full_name,
+               (u.first_name || ' ' || u.last_name)::VARCHAR(201) AS full_name,
                u.email,
                c.country_name,
                u.last_login
@@ -72,21 +73,22 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed get_booking_history function
 CREATE OR REPLACE FUNCTION get_booking_history(p_user_id INT)
     RETURNS TABLE
             (
                 booking_id        INT,
-                booking_reference TEXT,
-                property_name     TEXT,
-                room_type_name    TEXT,
+                booking_reference VARCHAR(20),
+                property_name     VARCHAR(200),
+                room_type_name    VARCHAR(100),
                 check_in_date     DATE,
                 check_out_date    DATE,
                 total_nights      INT,
                 total_amount      NUMERIC,
-                currency_code     TEXT,
-                booking_status    TEXT,
-                city_name         TEXT,
-                country_name      TEXT
+                currency_code     VARCHAR(3),
+                booking_status    VARCHAR(20),
+                city_name         VARCHAR(100),
+                country_name      VARCHAR(100)
             )
 AS
 $$
@@ -115,16 +117,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed get_user_profile function
 CREATE OR REPLACE FUNCTION get_user_profile(p_user_id INT)
     RETURNS TABLE
             (
                 user_id        INT,
-                email          TEXT,
-                first_name     TEXT,
-                last_name      TEXT,
-                phone_number   TEXT,
-                country_name   TEXT,
-                account_status TEXT,
+                email          VARCHAR(255),
+                first_name     VARCHAR(100),
+                last_name      VARCHAR(100),
+                phone_number   VARCHAR(20),
+                country_name   VARCHAR(100),
+                account_status VARCHAR(20),
                 total_bookings BIGINT,
                 created_at     TIMESTAMP,
                 last_login     TIMESTAMP
@@ -151,12 +154,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Fixed update_user_profile function
 CREATE OR REPLACE FUNCTION update_user_profile(
     p_user_id INT,
-    p_first_name TEXT DEFAULT NULL,
-    p_last_name TEXT DEFAULT NULL,
-    p_phone_number TEXT DEFAULT NULL,
-    p_country_code TEXT DEFAULT NULL
+    p_first_name VARCHAR(100) DEFAULT NULL,
+    p_last_name VARCHAR(100) DEFAULT NULL,
+    p_phone_number VARCHAR(20) DEFAULT NULL,
+    p_country_code VARCHAR(2) DEFAULT NULL
 ) RETURNS BOOLEAN AS
 $$
 DECLARE
