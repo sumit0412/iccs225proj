@@ -387,3 +387,61 @@ RETURN new_room_type_id;
 END;
 $
 LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION add_property_image(
+    property_id INT,
+    partner_id INT,
+    image_url TEXT,
+    image_category TEXT DEFAULT 'general',
+    display_order INT DEFAULT 0,
+    is_primary BOOLEAN DEFAULT FALSE
+) RETURNS INT AS $image$
+DECLARE
+    new_image_id INT;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM properties p
+        WHERE p.property_id = add_property_image.property_id
+          AND p.partner_id = add_property_image.partner_id
+    ) THEN
+        RAISE EXCEPTION 'Property not owned by partner';
+    END IF;
+
+    INSERT INTO property_images (
+        property_id, image_url, image_category, display_order, is_primary
+    )
+    VALUES (
+               property_id, image_url, image_category, display_order, is_primary
+           )
+    RETURNING image_id INTO new_image_id;
+
+    RETURN new_image_id;
+END;
+$image$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION set_property_amenities(
+    property_id INT,
+    partner_id INT,
+    amenity_ids INT[]
+) RETURNS BOOLEAN AS $amenities$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM properties p
+        WHERE p.property_id = set_property_amenities.property_id
+          AND p.partner_id = set_property_amenities.partner_id
+    ) THEN
+        RAISE EXCEPTION 'Property not owned by partner';
+    END IF;
+
+    DELETE FROM property_amenities
+    WHERE property_id = set_property_amenities.property_id;
+
+    INSERT INTO property_amenities (property_id, amenity_id, is_free)
+    SELECT
+        set_property_amenities.property_id,
+        unnest(amenity_ids),
+        TRUE;
+
+    RETURN TRUE;
+END;
+$amenities$ LANGUAGE plpgsql;

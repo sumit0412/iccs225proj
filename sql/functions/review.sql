@@ -125,28 +125,6 @@ WHERE r.property_id = target_property_id
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION update_review_status(
-    review_id INT,
-    new_status TEXT,
-    admin_id INT
-) RETURNS BOOLEAN AS $$
-BEGIN
-    IF new_status NOT IN ('pending', 'approved', 'rejected') THEN
-        RAISE EXCEPTION 'Invalid review status';
-END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM admin_users WHERE admin_id = update_review_status.admin_id) THEN
-        RAISE EXCEPTION 'Invalid admin user';
-END IF;
-
-UPDATE reviews
-SET review_status = new_status
-WHERE review_id = update_review_status.review_id;
-
-RETURN FOUND;
-END;
-$$ LANGUAGE plpgsql;
-
 CREATE OR REPLACE FUNCTION get_user_reviews(
     target_user_id INT,
     limit_count INT DEFAULT 10
